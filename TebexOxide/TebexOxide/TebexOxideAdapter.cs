@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using Oxide.Core.Libraries;
+using Oxide.Core.Libraries.Covalence;
+using Oxide.Game.Rust.Libraries;
+using Tebex.API;
+using Oxide.Plugins;
+
+namespace Tebex.Adapters
+{
+    public class TebexOxideAdapter : BaseTebexAdapter
+    {
+        public static TebexDonate Plugin { get; private set; }
+        
+        public TebexOxideAdapter(TebexDonate plugin)
+        {
+            Plugin = plugin;
+        }
+        
+        public override void Init()
+        {
+            // Initialize timers, hooks, etc. here
+            Plugin.PluginTimers().Every(121.0f, ProcessCommandQueue);
+            Plugin.PluginTimers().Every(60.0f, DeleteExecutedCommands);
+            Plugin.PluginTimers().Every(60.0f, ProcessJoinQueue);
+        }
+
+        public override void LogWarning(string message)
+        {
+            Plugin.Warn(message);
+        }
+
+        public override void LogError(string message)
+        {
+            Plugin.Error(message);
+        }
+
+        public override void LogInfo(string message)
+        {
+            Plugin.Info(message);
+        }
+
+        public override void LogDebug(string message)
+        {
+            Plugin.Error($"[DEBUG] {message}");
+        }
+
+        /**
+             * Sends a web request to the Tebex API. This is just a wrapper around webrequest.Enqueue, but passes through
+             * multiple callbacks that can be used to interact with each API function based on the response received.
+             */
+        public override void MakeWebRequest(string endpoint, string body, TebexApi.HttpVerb verb,
+            TebexApi.ApiSuccessCallback onSuccess, TebexApi.ApiErrorCallback onApiError,
+            TebexApi.ServerErrorCallback onServerError)
+        {
+            // Use Oxide request method for the webrequests call. We use HttpVerb in the api so as not to depend on
+            // Oxide.
+            RequestMethod method;
+            Enum.TryParse<RequestMethod>(verb.ToString(), true, out method);
+            if (method == null)
+            {
+                LogError($"Unknown HTTP method!: {verb.ToString()}");
+                LogError($"Failed to interpret HTTP method on request {verb} {endpoint}| {body}");
+            }
+            
+            var headers = new Dictionary<string, string>
+            {
+                { "X-Tebex-Secret", PluginConfig.SecretKey },
+                { "Content-Type", "application/json" }
+            };
+
+            var url = TebexApi.TebexApiBase + endpoint;
+            LogDebug($"-> {method.ToString()} {url} | {body}");
+
+            Plugin.WebRequests().Enqueue(url, body, (code, response) =>
+            {
+                LogDebug($"{code} <- {method.ToString()} {url}");
+
+                if (code == 200 || code == 201 || code == 202 || code == 204)
+                {
+                    onSuccess?.Invoke(code, response);
+                }
+                else if (code == 403) // Admins get a secret key warning on any command that's rejected
+                {
+                    LogInfo("Your server's secret key is either not set or incorrect.");
+                    LogInfo("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
+                    LogInfo("Set up your store and get your secret key at https://tebex.io/");
+                }
+                else if (code == 500)
+                {
+                    LogError(
+                        "Internal Server Error from Tebex API. Please try again later. Error details follow below.");
+                    LogError(response);
+                    onServerError?.Invoke(code, response);
+                }
+                else if (code == 0)
+                {
+                    LogError("Request Timeout from Tebex API. Please try again later.");
+                }
+                else // This should be a general failure error message with a JSON-formatted response from the API.
+                {
+                    try
+                    {
+                        var error = JsonConvert.DeserializeObject<TebexApi.TebexError>(response);
+                        if (error != null)
+                        {
+                            onApiError?.Invoke(error);
+                        }
+                        else
+                        {
+                            LogError($"Failed to unmarshal an expected error response from API.");
+                            onServerError?.Invoke(code, response);
+                        }
+
+                        LogDebug($"Request to {url} failed with code {code}.");
+                        LogDebug(response);
+                    }
+                    catch (Exception e) // Something really unexpected with our response and it's likely not JSON
+                    {
+                        LogError("Could not gracefully handle error response.");
+                        LogError($"Response from remote {response}");
+                        LogError(e.ToString());
+                        onServerError?.Invoke(code, $"{e.Message}: {response}");
+                    }
+                }
+            }, Plugin, method, headers, 10.0f);
+        }
+
+        public override void ReplyPlayer(object player, string message)
+        {
+            var playerInstance = player as IPlayer;
+            if (playerInstance != null)
+            {
+                playerInstance.Reply("{0}", "", message);    
+            }
+        }
+        
+        public override void ExecuteOfflineCommand(TebexApi.Command command, string commandName, string[] args)
+        {
+            if (command.Conditions.Delay > 0)
+            {
+                // Command requires a delay, use built-in plugin timer to wait until callback
+                // in order to respect game threads
+                Plugin.PluginTimers().Once(command.Conditions.Delay,
+                    () =>
+                    {
+                        Plugin.Server().Command(commandName, args);
+                        ExecutedCommands.Add(command);
+                    });
+            }
+            else // No delay, execute immediately
+            {
+                Plugin.Server().Command(commandName, args);
+                ExecutedCommands.Add(command);
+            }
+        }
+        
+        public override bool IsPlayerOnline(string playerRefId)
+        {
+            IPlayer iPlayer = GetPlayerRef(playerRefId) as IPlayer;
+            if (iPlayer == null) //Ensure the lookup worked
+            {
+                LogError($"Attempted to look up online player, but no reference found: {playerRefId}");
+                return false;
+            }
+            
+            return iPlayer.IsConnected;
+        }
+
+        public override object GetPlayerRef(string playerId)
+        {
+            return Plugin.PlayerManager().FindPlayer(playerId);
+        }
+        public override void ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName, string[] args)
+        {
+            // Cast down to the base player in order to get inventory slots available.
+
+            /* FIXME we don't get the right player ref here to have inventory access. Need rust player, not covalence 
+            Player player = playerObj as Player;
+
+            var slotsAvailable = player.Inventory(player.FindById(command.Player.Id)).containerMain.availableSlots.Count;
+                                
+            // Some commands have slot requirements, don't execute those if the player can't accept it
+            if (slotsAvailable < command.Conditions.Slots)
+            {
+                LogInfo($"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
+                return;
+            }*/
+            
+            // Pass through to offline command as it also verifies timing conditions
+            LogInfo($"> Executing command {command.CommandToRun}");
+            ExecuteOfflineCommand(command, commandName, args);
+        }
+    }
+}

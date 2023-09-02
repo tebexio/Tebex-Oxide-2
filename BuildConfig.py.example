@@ -1,0 +1,18 @@
+dev_rust_server_ip = "127.0.0.1"
+dev_rust_server_rcon_port = "28016"
+dev_rust_server_rcon_password = "password"
+
+source_dir = "./TebexOxide/TebexOxide"
+source_files = ["BaseTebexAdapter.cs", "TebexApi.cs", "TebexDonate.cs", "TebexOxideAdapter.cs"]
+output_file = "./Build/TebexDonate.cs.out"
+
+rust_plugin_header = """using Newtonsoft.Json;
+using Oxide.Core.Libraries;
+using Oxide.Core.Libraries.Covalence;
+using Oxide.Game.Rust.Libraries;
+using Oxide.Plugins;
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.Linq;
+"""
