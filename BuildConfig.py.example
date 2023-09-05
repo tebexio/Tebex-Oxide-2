@@ -4,7 +4,7 @@ dev_rust_server_rcon_password = "password"
 
 source_dir = "./TebexOxide/TebexOxide"
 source_files = ["BaseTebexAdapter.cs", "TebexApi.cs", "TebexDonate.cs", "TebexOxideAdapter.cs"]
-output_file = "./Build/TebexDonate.cs.out"
+output_file = "./Build/TebexDonate.cs.out" #Make sure the destination folder exists
 
 rust_plugin_header = """using Newtonsoft.Json;
 using Oxide.Core.Libraries;

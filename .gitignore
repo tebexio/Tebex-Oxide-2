@@ -259,3 +259,5 @@ BuildConfig.py
 .DS_Store
 .idea/
 DeployTest.sh
+StartRust.bat
+StartRust.ps1
