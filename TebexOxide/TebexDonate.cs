@@ -11,7 +11,7 @@ using Tebex.API;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex Donate", "Tebex", "2.0.0a")]
+    [Info("Tebex Donate", "Tebex", "2.0.1a")]
     [Description("Official support for the Tebex server monetization platform")]
     public class TebexDonate : CovalencePlugin
     {
