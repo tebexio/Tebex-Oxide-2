@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
@@ -175,22 +176,81 @@ namespace Tebex.Adapters
         public override void ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName, string[] args)
         {
             // Cast down to the base player in order to get inventory slots available.
-
-            /* FIXME we don't get the right player ref here to have inventory access. Need rust player, not covalence 
-            Player player = playerObj as Player;
-
-            var slotsAvailable = player.Inventory(player.FindById(command.Player.Id)).containerMain.availableSlots.Count;
-                                
-            // Some commands have slot requirements, don't execute those if the player can't accept it
-            if (slotsAvailable < command.Conditions.Slots)
+            try
             {
-                LogInfo($"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
-                return;
-            }*/
+                Player player = playerObj as Player;
+
+                var slotsAvailable = player.Inventory(player.FindById(command.Player.Id)).containerMain.availableSlots
+                    .Count;
+
+                // Some commands have slot requirements, don't execute those if the player can't accept it
+                if (slotsAvailable < command.Conditions.Slots)
+                {
+                    LogInfo(
+                        $"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
+                    return;
+                }
+            }
+            catch (Exception e)
+            {
+                LogError("Failed to run check for command conditions.");
+                LogError(e.ToString());
+            }
             
             // Pass through to offline command as it also verifies timing conditions
-            LogInfo($"> Executing command {command.CommandToRun}");
+            LogInfo($"> Executing command {commandName}");
             ExecuteOfflineCommand(command, commandName, args);
+        }
+
+        public override string ExpandOfflineVariables(string input, TebexApi.PlayerInfo info)
+        {
+            StringBuilder parsed = new StringBuilder(input);
+            parsed.Replace("{id}", info.Id);
+            parsed.Replace("{username}", info.Username);
+            parsed.Replace("{name}", info.Username);
+
+            string parsedStr = parsed.ToString();
+            if (parsedStr.Contains("{") || parsedStr.Contains("}"))
+            {
+                LogWarning($"Detected lingering curly braces after expanding offline variables!");
+                LogWarning($"Input: {input}");
+                LogWarning($"Parsed: {parsedStr}");
+            }
+
+            return parsedStr;
+        }
+        
+        public override string ExpandUsernameVariables(string input, object playerObj)
+        {
+            IPlayer iPlayer = playerObj as IPlayer;
+            if (iPlayer == null)
+            {
+                LogError($"Could not cast player instance when expanding username variables: {playerObj}");
+                return input;
+            }
+
+            if (string.IsNullOrEmpty(iPlayer.Id) || string.IsNullOrEmpty(iPlayer.Name))
+            {
+                LogError($"Player ID or name is null while expanding username?!: {iPlayer}");
+                LogError($"Base player object: {playerObj}");
+                LogError($"Input command: {input}");
+                return input; 
+            }
+            
+            StringBuilder parsed = new StringBuilder(input);
+            parsed.Replace("{id}", iPlayer.Id);
+            parsed.Replace("{username}", iPlayer.Name);
+            parsed.Replace("{name}", iPlayer.Name);
+
+            string parsedStr = parsed.ToString();
+            if (parsedStr.Contains("{") || parsedStr.Contains("}"))
+            {
+                LogWarning($"Detected lingering curly braces after expanding username variables!");
+                LogWarning($"Input: {input}");
+                LogWarning($"Parsed: {parsedStr}");
+            }
+
+            return parsedStr;
         }
     }
 }

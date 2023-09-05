@@ -368,11 +368,12 @@ namespace Tebex.Adapters
                         LogInfo($"Found {offlineCommands.Commands.Count} offline commands to execute.");
                         foreach (TebexApi.Command command in offlineCommands.Commands)
                         {
-                            var splitCommand = command.CommandToRun.Split(' ');
+                            var parsedCommand = ExpandOfflineVariables(command.CommandToRun, command.Player);
+                            var splitCommand = parsedCommand.Split(' ');
                             var commandName = splitCommand[0];
                             var args = splitCommand.Skip(1);
                             
-                            LogInfo($"Executing offline command: `{command.CommandToRun}`");
+                            LogInfo($"Executing offline command: `{parsedCommand}`");
                             ExecuteOfflineCommand(command, commandName, args.ToArray());
                         }
                     }, (error) =>
@@ -417,20 +418,21 @@ namespace Tebex.Adapters
                             LogInfo($"> Processing {onlineCommands.Commands.Count} commands for this player...");
                             foreach (var command in onlineCommands.Commands)
                             {
-                                var splitCommand = command.CommandToRun.Split(' ');
-                                var commandName = splitCommand[0];
-                                var args = splitCommand.Skip(1);
-                                
                                 object playerRef = GetPlayerRef(onlineCommands.Player.Id);
                                 if (playerRef == null)
                                 {
                                     LogError($"No reference found for expected online player. Commands will be skipped for this player.");
                                     break;
                                 }
+
+                                var parsedCommand = ExpandUsernameVariables(command.CommandToRun, playerRef);
+                                var splitCommand = parsedCommand.Split(' ');
+                                var commandName = splitCommand[0];
+                                var args = splitCommand.Skip(1);
                                 
-                                LogDebug($"Pre-execution: {command.CommandToRun}");
+                                LogDebug($"Pre-execution: {parsedCommand}");
                                 ExecuteOnlineCommand(command, playerRef, commandName, args.ToArray());
-                                LogDebug($"Post-execution: {command.CommandToRun}");
+                                LogDebug($"Post-execution: {parsedCommand}");
                                 ExecutedCommands.Add(command);
                             }
                         }, tebexError => // Error for this player's online commands
@@ -502,6 +504,16 @@ namespace Tebex.Adapters
         public abstract bool IsPlayerOnline(string playerRefId);
         public abstract object GetPlayerRef(string playerId);
 
+        /**
+         * As we support the use of different games across the Tebex Store
+         * we offer slightly different ways of getting a customer username or their ID.
+         * 
+         * All games support the same default variables, but some games may have additional variables.
+         */
+        public abstract string ExpandUsernameVariables(string input, object playerObj);
+
+        public abstract string ExpandOfflineVariables(string input, TebexApi.PlayerInfo info);
+        
         public abstract void MakeWebRequest(string endpoint, string body, TebexApi.HttpVerb verb,
             TebexApi.ApiSuccessCallback onSuccess, TebexApi.ApiErrorCallback onApiError,
             TebexApi.ServerErrorCallback onServerError);
