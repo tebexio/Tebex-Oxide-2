@@ -16,7 +16,7 @@ namespace Oxide.Plugins
     public class TebexDonate : CovalencePlugin
     {
         private static TebexOxideAdapter _adapter;
-
+        
         private void Init()
         {
             // Setup our API and adapter
@@ -36,6 +36,15 @@ namespace Oxide.Plugins
             _adapter.LogInfo("Tebex detected a new configuration file.");
             _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
             _adapter.LogInfo("Alternatively, add the secret key to 'TebexDonate.json' and reload the plugin.");
+            
+            // Register permissions
+            permission.RegisterPermission("tebex.secret", this);
+            permission.RegisterPermission("tebex.sendlink", this);
+            permission.RegisterPermission("tebex.forcecheck", this);
+            permission.RegisterPermission("tebex.refresh", this);
+            permission.RegisterPermission("tebex.report", this);
+            permission.RegisterPermission("tebex.ban", this);
+            permission.RegisterPermission("tebex.lookup", this);
         }
         
         public WebRequests WebRequests()
@@ -183,7 +192,7 @@ namespace Oxide.Plugins
         private void TebexSecretCommand(IPlayer player, string command, string[] args)
         {
             // Secret can only be ran as the admin
-            if (!player.IsAdmin)
+            if (!player.HasPermission("tebex.secret"))
             {
                 _adapter.ReplyPlayer(player, "You must be an administrator to run this command.");
                 return;
@@ -261,7 +270,7 @@ namespace Oxide.Plugins
         private void TebexHelpCommand(IPlayer player, string command, string[] args)
         {
             _adapter.ReplyPlayer(player, "Tebex Commands Available:");
-            if (player.IsAdmin)
+            if (player.IsAdmin) //Always show help to admins regardless of perms, for new server owners
             {
                 _adapter.ReplyPlayer(player, "-- Administrator Commands --");
                 _adapter.ReplyPlayer(player, "tebex.secret <secretKey>          - Sets your server's secret key.");
@@ -284,7 +293,7 @@ namespace Oxide.Plugins
         [Command("tebex.forcecheck", "tebex:forcecheck")]
         private void TebexForceCheckCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.IsAdmin)
+            if (!player.HasPermission("tebex.forcecheck"))
             {
                 _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
                 return;
@@ -296,7 +305,7 @@ namespace Oxide.Plugins
         [Command("tebex.refresh", "tebex:refresh")]
         private void TebexRefreshCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.IsAdmin)
+            if (!player.HasPermission("tebex.refresh"))
             {
                 _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
                 return;
@@ -319,7 +328,7 @@ namespace Oxide.Plugins
         [Command("tebex.report", "tebex:report")]
         private void TebexReportCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.IsAdmin)
+            if (!player.HasPermission("tebex.report"))
             {
                 _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
                 return;
@@ -332,7 +341,7 @@ namespace Oxide.Plugins
         [Command("tebex.ban", "tebex:ban")]
         private void TebexBanCommand(IPlayer commandRunner, string command, string[] args)
         {
-            if (!commandRunner.IsAdmin)
+            if (!commandRunner.HasPermission("tebex.ban"))
             {
                 _adapter.ReplyPlayer(commandRunner, $"{command} can only be used by administrators.");
                 return;
@@ -395,9 +404,9 @@ namespace Oxide.Plugins
         [Command("tebex.lookup", "tebex:lookup")]
         private void TebexLookupCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.IsAdmin)
+            if (!player.HasPermission("tebex.lookup"))
             {
-                _adapter.ReplyPlayer(player, "You must be an administrator to run this command.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run this command.");
                 return;
             }
             
@@ -433,7 +442,7 @@ namespace Oxide.Plugins
         [Command("tebex.sendlink", "tebex:sendlink")]
         private void TebexSendLinkCommand(IPlayer commandRunner, string command, string[] args)
         {
-            if (!commandRunner.IsAdmin)
+            if (!commandRunner.HasPermission("tebex.sendlink"))
             {
                 _adapter.ReplyPlayer(commandRunner, "You must be an administrator to run this command.");
                 return;
