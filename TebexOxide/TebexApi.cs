@@ -142,7 +142,7 @@ namespace Tebex.API
 
             [JsonProperty("order")] public string Order { get; set; } = "";
 
-            [JsonProperty("image")] public bool Image { get; set; }
+            [JsonProperty("image")] public string Image { get; set; }
 
             [JsonProperty("price")] public double Price { get; set; }
 
@@ -172,7 +172,7 @@ namespace Tebex.API
 
             [JsonProperty("create_giftcard")] public bool CreateGiftcard { get; set; }
 
-            [JsonProperty("show_until")] public bool ShowUntil { get; set; }
+            [JsonProperty("show_until")] public string ShowUntil { get; set; }
 
             [JsonProperty("gui_item")] public string GuiItem { get; set; } = "";
 
