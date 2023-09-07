@@ -11,9 +11,9 @@ using Tebex.API;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex Donate", "Tebex", "2.0.1a")]
+    [Info("Tebex", "Tebex", "2.0.1a")]
     [Description("Official support for the Tebex server monetization platform")]
-    public class TebexDonate : CovalencePlugin
+    public class Tebex : CovalencePlugin
     {
         private static TebexOxideAdapter _adapter;
         
@@ -35,7 +35,7 @@ namespace Oxide.Plugins
 
             _adapter.LogInfo("Tebex detected a new configuration file.");
             _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
-            _adapter.LogInfo("Alternatively, add the secret key to 'TebexDonate.json' and reload the plugin.");
+            _adapter.LogInfo("Alternatively, add the secret key to 'Tebex.json' and reload the plugin.");
             
             // Register permissions
             permission.RegisterPermission("tebex.secret", this);
@@ -180,7 +180,7 @@ namespace Oxide.Plugins
 
         protected override void LoadDefaultConfig()
         {
-            Config.WriteObject(GetDefaultConfig(), true, "oxide/config/TebexDonate.json");
+            Config.WriteObject(GetDefaultConfig(), true, "oxide/config/Tebex.json");
         }
 
         private BaseTebexAdapter.TebexConfig GetDefaultConfig()
@@ -194,7 +194,7 @@ namespace Oxide.Plugins
             // Secret can only be ran as the admin
             if (!player.HasPermission("tebex.secret"))
             {
-                _adapter.ReplyPlayer(player, "You must be an administrator to run this command.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run this command.");
                 return;
             }
             

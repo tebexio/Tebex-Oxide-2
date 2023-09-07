@@ -12,9 +12,9 @@ namespace Tebex.Adapters
 {
     public class TebexOxideAdapter : BaseTebexAdapter
     {
-        public static TebexDonate Plugin { get; private set; }
+        public static Oxide.Plugins.Tebex Plugin { get; private set; }
         
-        public TebexOxideAdapter(TebexDonate plugin)
+        public TebexOxideAdapter(Oxide.Plugins.Tebex plugin)
         {
             Plugin = plugin;
         }
@@ -204,20 +204,19 @@ namespace Tebex.Adapters
 
         public override string ExpandOfflineVariables(string input, TebexApi.PlayerInfo info)
         {
-            StringBuilder parsed = new StringBuilder(input);
+            string parsed = input;
             parsed.Replace("{id}", info.Id);
             parsed.Replace("{username}", info.Username);
             parsed.Replace("{name}", info.Username);
-
-            string parsedStr = parsed.ToString();
-            if (parsedStr.Contains("{") || parsedStr.Contains("}"))
+            
+            if (parsed.Contains("{") || parsed.Contains("}"))
             {
-                LogWarning($"Detected lingering curly braces after expanding offline variables!");
-                LogWarning($"Input: {input}");
-                LogWarning($"Parsed: {parsedStr}");
+                LogDebug($"Detected lingering curly braces after expanding offline variables!");
+                LogDebug($"Input: {input}");
+                LogDebug($"Parsed: {parsed}");
             }
 
-            return parsedStr;
+            return parsed;
         }
         
         public override string ExpandUsernameVariables(string input, object playerObj)
@@ -236,21 +235,20 @@ namespace Tebex.Adapters
                 LogError($"Input command: {input}");
                 return input; 
             }
-            
-            StringBuilder parsed = new StringBuilder(input);
+
+            string parsed = input;
             parsed.Replace("{id}", iPlayer.Id);
             parsed.Replace("{username}", iPlayer.Name);
             parsed.Replace("{name}", iPlayer.Name);
-
-            string parsedStr = parsed.ToString();
-            if (parsedStr.Contains("{") || parsedStr.Contains("}"))
+            
+            if (parsed.Contains("{") || parsed.Contains("}"))
             {
-                LogWarning($"Detected lingering curly braces after expanding username variables!");
-                LogWarning($"Input: {input}");
-                LogWarning($"Parsed: {parsedStr}");
+                LogDebug($"Detected lingering curly braces after expanding username variables!");
+                LogDebug($"Input: {input}");
+                LogDebug($"Parsed: {parsed}");
             }
 
-            return parsedStr;
+            return parsed;
         }
     }
 }
