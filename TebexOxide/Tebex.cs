@@ -195,12 +195,13 @@ namespace Oxide.Plugins
             if (!player.HasPermission("tebex.secret"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run this command.");
+                _adapter.ReplyPlayer(player, "If you are an admin, grant permission to use `tebex.secret`");
                 return;
             }
             
             if (args.Length != 1)
             {
-                _adapter.ReplyPlayer(player, "Invalid syntax. Usage: \"tebex:secret <secret>\"");
+                _adapter.ReplyPlayer(player, "Invalid syntax. Usage: \"tebex.secret <secret>\"");
                 return;
             }
             
