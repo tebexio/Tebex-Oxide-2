@@ -86,11 +86,11 @@ def merge_source_files():
         file.write("{\n")
         
         # Write the plugin first as our classes are defined inside of it.
-        file.write(output["TebexDonate.cs"][:-2]) # remove the close curly brace to leave class definition open
+        file.write(output["Tebex.cs"][:-2]) # remove the close curly brace to leave class definition open
         
         # Write the rest of our files
         for sourceFile in output.keys():
-            if sourceFile != "TebexDonate.cs":
+            if sourceFile != "Tebex.cs":
                 file.write(output[sourceFile])
         
         # Closing braces
@@ -98,7 +98,7 @@ def merge_source_files():
 
 def test_remote_reload():
     print('Checking if the plugin compiles/reloads...')
-    send_rcon_command("oxide.reload TebexDonate")
+    send_rcon_command("oxide.reload Tebex")
     time.sleep(2)
     if reload_successful:
         print("Successfully reloaded plugin on remote server.")
