@@ -7,12 +7,15 @@ import json
 import threading
 import argparse
 import os
+import re
 
 # websocket to dev rust server
 ws = None
 
 # whether we detected a successful compilation via rcon
 reload_successful = False
+min_hook_time = 1000
+max_hook_time = 0
 
 def main():
     parser = argparse.ArgumentParser(description='Manage build operations for Rust.')
@@ -20,6 +23,7 @@ def main():
     parser.add_argument('--TestRemoteReload', action='store_true', help='Connect to the dev Rust server and check if the plugin compiles/reloads.')
     parser.add_argument('--DeployTest', action='store_true', help='Runs a deployment script.')
     parser.add_argument('--OpenDevConsole', action='store_true', help='Connect to the dev Rust server and open an interactive console.')
+    parser.add_argument('--WatchHookTimes', action='store_true', help='Continually monitor the average hook time.')
     
     
     args = parser.parse_args()
@@ -31,23 +35,30 @@ def main():
         print("Deploying to test server...")
         os.system("./DeployTest.sh")
         
-    if args.TestRemoteReload or args.OpenDevConsole:
+    if args.TestRemoteReload or args.OpenDevConsole or args.WatchHookTimes:
         threading.Thread(target=connect_websocket_and_read,
             args=(f"ws://{BuildConfig.dev_rust_server_ip}:{BuildConfig.dev_rust_server_rcon_port}/{BuildConfig.dev_rust_server_rcon_password}",), daemon=True).start()
 
         time.sleep(1)
         if args.TestRemoteReload:
             test_remote_reload()
-        
+
+
+        if args.WatchHookTimes:
+            watch_hook_times()
+
+            
         if args.OpenDevConsole:
             open_dev_console()
 
+            
 def merge_source_files():
     print('Merging source files...')
 
     output = {}
     for file_name in os.listdir(BuildConfig.source_dir):
         if file_name not in BuildConfig.source_files:
+            print("skipping " + file_name)
             continue
 
         file_path = f'{BuildConfig.source_dir}/{file_name}'
@@ -133,13 +144,50 @@ def connect_websocket_and_read(wsUrl):
 def on_rcon_response(parsed_response):
     global reload_successful
 
+    canPrint = True
     message = parsed_response["Message"]
-    print("> ", parsed_response)
+    
+    # Ignore print listing since it can be polled
+    if "Listing" in message or message == '':
+        canPrint = False
+    
+    if canPrint:
+        print("> ", parsed_response)
 
     if "TebexDonate was compiled successfully" in message:
         reload_successful = True
 
+    # Check for plugin listing
+    if "Listing" in message:
+        # Extract hook time with a regex
+        try:
+            match = re.search(r'\((\d+\.\d+)s\)', message)
+            if match:
+                global min_hook_time
+                global max_hook_time
+                
+                lastHookTime = float(match.group(1))
+                if lastHookTime < min_hook_time:
+                    min_hook_time = lastHookTime
+                if lastHookTime > max_hook_time:
+                    max_hook_time = lastHookTime
+                print("hook times: min: {} cur: {} max: {}".format(min_hook_time, lastHookTime, max_hook_time))
+            else:
+                print("No match")
+        except Exception as e:
+            print(e)
 
+def watch_hook_times():
+    print("Beginning watch of hook times...")
+    hook_watch_thread = threading.Thread(target=hook_time_command_sender)
+    hook_watch_thread.daemon = True #stop when the main app stops
+    hook_watch_thread.start()
+    
+def hook_time_command_sender():
+    while True:
+        send_rcon_command("plugins")
+        time.sleep(1)
+    
 def send_rcon_command(command):
     global ws
     message = json.dumps({
