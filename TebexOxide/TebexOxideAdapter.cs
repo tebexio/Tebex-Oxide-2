@@ -71,7 +71,7 @@ namespace Tebex.Adapters
                 { "Content-Type", "application/json" }
             };
 
-            var url = TebexApi.TebexApiBase + endpoint;
+            var url = endpoint;
             LogDebug($"-> {method.ToString()} {url} | {body}");
 
             Plugin.WebRequests().Enqueue(url, body, (code, response) =>
@@ -249,6 +249,40 @@ namespace Tebex.Adapters
             }
 
             return parsed;
+        }
+        
+        public List<string> ReadLastLinesFromFile(string filePath, int nLines)
+        {
+            List<string> result = new List<string>(nLines);
+            Queue<string> lineQueue = new Queue<string>(nLines);
+
+            try
+            {
+                using (StreamReader reader = new StreamReader(filePath))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (lineQueue.Count == nLines)
+                        {
+                            lineQueue.Dequeue();
+                        }
+                        lineQueue.Enqueue(line);
+                    }
+                }
+
+                result.AddRange(lineQueue);
+            }
+            catch (FileNotFoundException e)
+            {
+                Console.WriteLine($"File not found: {e.Message}");
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine($"IO error occurred: {e.Message}");
+            }
+
+            return result;
         }
     }
 }

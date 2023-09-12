@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Tebex.API;
+using Tebex.Triage;
 
 namespace Tebex.Adapters
 {
@@ -517,5 +518,37 @@ namespace Tebex.Adapters
         public abstract void MakeWebRequest(string endpoint, string body, TebexApi.HttpVerb verb,
             TebexApi.ApiSuccessCallback onSuccess, TebexApi.ApiErrorCallback onApiError,
             TebexApi.ServerErrorCallback onServerError);
+
+        public void ReportAutoTriageEvent(TebexTriage.AutoTriageEvent autoTriageEvent)
+        {
+            MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.ToString(autoTriageEvent),
+                TebexApi.HttpVerb.POST,
+                (code, body) =>
+                {
+                    LogDebug("Successfully submitted auto triage event");
+                }, (error) =>
+                {
+                    LogDebug("Triage API responded with error: " + error.ErrorMessage);
+                }, (code, body) =>
+                {
+                    LogDebug("Triage API encountered a server error while submitting triage event: " + body);
+                });
+        }
+
+        public void ReportManualTriageEvent(TebexTriage.ReportedTriageEvent reportedTriageEvent)
+        {
+            MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.SerializeObject(reportedTriageEvent),
+                TebexApi.HttpVerb.POST,
+                (code, body) =>
+                {
+                    LogDebug("Successfully submitted auto triage event");
+                }, (error) =>
+                {
+                    LogDebug("Triage API responded with error: " + error.ErrorMessage);
+                }, (code, body) =>
+                {
+                    LogDebug("Triage API encountered a server error while submitting triage event: " + body);
+                });
+        }
     }
 }

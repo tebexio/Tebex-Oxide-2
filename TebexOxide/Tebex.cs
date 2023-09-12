@@ -6,16 +6,24 @@ using Oxide.Plugins;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using Oxide.Core;
+using Oxide.Game.Rust;
 using Tebex.Adapters;
 using Tebex.API;
+using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.1a")]
+    [Info("Tebex", "Tebex", "2.0.2a")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
         private static TebexOxideAdapter _adapter;
+
+        public static string GetPluginVersion()
+        {
+            return "2.0.2a";
+        }
         
         private void Init()
         {
@@ -30,13 +38,6 @@ namespace Oxide.Plugins
                 LoadConfig();
             }
 
-            // Check if the secret key has been set and send a message if so.
-            if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here") return;
-
-            _adapter.LogInfo("Tebex detected a new configuration file.");
-            _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
-            _adapter.LogInfo("Alternatively, add the secret key to 'Tebex.json' and reload the plugin.");
-            
             // Register permissions
             permission.RegisterPermission("tebex.secret", this);
             permission.RegisterPermission("tebex.sendlink", this);
@@ -45,6 +46,13 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.report", this);
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
+            
+            // Check if the secret key has been set and send a message if so.
+            if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here") return;
+
+            _adapter.LogInfo("Tebex detected a new configuration file.");
+            _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
+            _adapter.LogInfo("Alternatively, add the secret key to 'Tebex.json' and reload the plugin.");
         }
         
         public WebRequests WebRequests()
@@ -314,7 +322,8 @@ namespace Oxide.Plugins
             
             _adapter.ReplyPlayer(player, "Refreshing listings...");
             BaseTebexAdapter.Cache.Instance.Remove("packages");
-            BaseTebexAdapter.Cache.Instance.Remove("packages");
+            BaseTebexAdapter.Cache.Instance.Remove("categories");
+            
             _adapter.RefreshListings((code, body) =>
             {
                 if (BaseTebexAdapter.Cache.Instance.HasValid("packages") && BaseTebexAdapter.Cache.Instance.HasValid("categories"))
@@ -335,8 +344,25 @@ namespace Oxide.Plugins
                 return;
             }
 
-            //TODO
-            _adapter.ReplyPlayer(player, "NOOP");
+            var triageEvent = new TebexTriage.ReportedTriageEvent();
+            triageEvent.GameId = "Rust " + server.Version;
+            triageEvent.FrameworkId = "Oxide " + server.Protocol;
+            triageEvent.PluginVersion = GetPluginVersion();
+            triageEvent.ServerIp = server.Address.ToString();
+            triageEvent.ErrorMessage = "Player ran /report command";
+            triageEvent.Trace = "";
+            triageEvent.Metadata = new Dictionary<string, string>()
+            {
+                
+            };
+            triageEvent.Username = player.Name + "/" + player.Id;
+            triageEvent.UserIp = player.Address;
+            
+            // Get last 500 lines of the server log
+            triageEvent.Log = "";
+            
+            _adapter.ReportManualTriageEvent(triageEvent);
+            _adapter.ReplyPlayer(player, "Submitted your report to the Tebex team. Thank you!");
         }
 
         [Command("tebex.ban", "tebex:ban")]

@@ -9,6 +9,8 @@ namespace Tebex.API
     public class TebexApi
     {
         public static readonly string TebexApiBase = "https://plugin.tebex.io/";
+        public static readonly string TebexTriageUrl = "https://triage.tebex.workers.dev/";
+        
         public static TebexApi Instance => _apiInstance.Value;
         public static BaseTebexAdapter Adapter { get; private set; }
 
@@ -52,7 +54,7 @@ namespace Tebex.API
             ApiSuccessCallback onSuccess = null, ApiErrorCallback onApiError = null,
             ServerErrorCallback onServerError = null)
         {
-            Adapter.MakeWebRequest(endpoint, body, method, onSuccess, onApiError, onServerError);
+            Adapter.MakeWebRequest(TebexApiBase + endpoint, body, method, onSuccess, onApiError, onServerError);
         }
 
         #region Events
