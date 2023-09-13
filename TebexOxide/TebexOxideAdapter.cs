@@ -46,7 +46,10 @@ namespace Tebex.Adapters
 
         public override void LogDebug(string message)
         {
-            Plugin.Error($"[DEBUG] {message}");
+            if (PluginConfig.DebugMode)
+            {
+                Plugin.Error($"[DEBUG] {message}");    
+            }
         }
 
         /**
