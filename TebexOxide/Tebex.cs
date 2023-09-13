@@ -54,6 +54,13 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.checkout", this);
             permission.RegisterPermission("tebex.stats", this);
             
+            // Check if auto reporting is disabled and show a warning if so.
+            if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
+            {
+                _adapter.LogInfo("Auto reporting issues to Tebex is disabled.");
+                _adapter.LogInfo("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
+            }
+            
             // Check if secret key has been set. If so, get store information and place in cache
             if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here")
             {
