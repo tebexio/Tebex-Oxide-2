@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Tebex.Adapters;
 
 namespace Tebex.Triage
 {
@@ -14,8 +15,22 @@ namespace Tebex.Triage
             [JsonProperty("error_message")] public string ErrorMessage { get; set; }
             [JsonProperty("trace")] public string Trace { get; set; }
             [JsonProperty("metadata")] public Dictionary<string, string> Metadata { get; set; }
+            [JsonProperty("store_name")] public string StoreName { get; set; }
+            [JsonProperty("store_url")] public string StoreUrl { get; set; }
         }
 
+        public static AutoTriageEvent CreateAutoTriageEvent(string message, Dictionary<string, string> metadata)
+        {
+            var triageEvent = new TebexTriage.ReportedTriageEvent();
+
+            triageEvent.ErrorMessage = message;
+            triageEvent.Trace = "";
+            triageEvent.Metadata = metadata;
+            triageEvent.Log = "";
+
+            return triageEvent;
+        }
+        
         // For issues reported using the /report command
         public class ReportedTriageEvent : AutoTriageEvent
         {

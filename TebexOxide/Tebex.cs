@@ -47,9 +47,14 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
             
-            // Check if the secret key has been set and send a message if so.
-            if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here") return;
-
+            // Check if secret key has been set. If so, get store information and place in cache
+            if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here")
+            {
+                // No-op, just to place info in the cache for any future triage events
+                _adapter.FetchStoreInfo((info => { }));
+                return;    
+            }
+            
             _adapter.LogInfo("Tebex detected a new configuration file.");
             _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
             _adapter.LogInfo("Alternatively, add the secret key to 'Tebex.json' and reload the plugin.");
@@ -75,6 +80,11 @@ namespace Oxide.Plugins
             return server;
         }
 
+        public string GetGame()
+        {
+            return game;
+        }
+        
         public void Warn(string message)
         {
             LogWarning("{0}", message);
@@ -343,26 +353,46 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
                 return;
             }
-
-            var triageEvent = new TebexTriage.ReportedTriageEvent();
-            triageEvent.GameId = "Rust " + server.Version;
-            triageEvent.FrameworkId = "Oxide " + server.Protocol;
-            triageEvent.PluginVersion = GetPluginVersion();
-            triageEvent.ServerIp = server.Address.ToString();
-            triageEvent.ErrorMessage = "Player ran /report command";
-            triageEvent.Trace = "";
-            triageEvent.Metadata = new Dictionary<string, string>()
+            
+            if (args.Length == 0) // require /confirm to send
             {
+                _adapter.ReplyPlayer(player, "Please run `tebex.report confirm 'Your description here'` to submit your report. The following information will be sent to Tebex: ");
+                _adapter.ReplyPlayer(player, "- Your game version, store id, and server IP.");
+                _adapter.ReplyPlayer(player, "- Your username and IP address.");
+                _adapter.ReplyPlayer(player, "- Please include a short description of the issue you were facing.");
+            }
+
+            if (args.Length == 2 && args[0] == "confirm")
+            {
+                _adapter.ReplyPlayer(player, "Sending your report to Tebex...");
                 
-            };
-            triageEvent.Username = player.Name + "/" + player.Id;
-            triageEvent.UserIp = player.Address;
+                var triageEvent = new TebexTriage.ReportedTriageEvent();
+                triageEvent.GameId = $"{game} {server.Version}|{server.Protocol}";
+                triageEvent.FrameworkId = "Oxide";
+                triageEvent.PluginVersion = GetPluginVersion();
+                triageEvent.ServerIp = server.Address.ToString();
+                triageEvent.ErrorMessage = "Player Report: " + args[1];
+                triageEvent.Trace = "";
+                triageEvent.Metadata = new Dictionary<string, string>()
+                {
+                
+                };
+                triageEvent.Username = player.Name + "/" + player.Id;
+                triageEvent.UserIp = player.Address;
+                
+                _adapter.ReportManualTriageEvent(triageEvent, (code, body) =>
+                {
+                    _adapter.ReplyPlayer(player, "Submitted your report to the Tebex team. Thank you!");
+                }, (code, body) =>
+                {
+                    _adapter.ReplyPlayer(player, "An error occurred while submitting your report. Please contact our support team directly.");
+                    _adapter.ReplyPlayer(player, "Error: " + body);
+                });
+                
+                return;
+            }
             
-            // Get last 500 lines of the server log
-            triageEvent.Log = "";
-            
-            _adapter.ReportManualTriageEvent(triageEvent);
-            _adapter.ReplyPlayer(player, "Submitted your report to the Tebex team. Thank you!");
+            _adapter.ReplyPlayer(player, $"Usage: tebex.report <confirm> '<message>'");
         }
 
         [Command("tebex.ban", "tebex:ban")]

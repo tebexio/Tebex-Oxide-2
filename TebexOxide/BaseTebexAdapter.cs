@@ -220,7 +220,10 @@ namespace Tebex.Adapters
                 }
 
                 Cache.Instance.Set("categories", new CachedObject(response.categories, PluginConfig.CacheLifetime));
-                onSuccess?.Invoke(code, body);
+                if (onSuccess != null)
+                {
+                    onSuccess.Invoke(code, body);    
+                }
             });
 
             // Get our packages from a verbose get all packages call so that we always have the description
@@ -289,20 +292,40 @@ namespace Tebex.Adapters
         public void GetPackages(GetPackagesResponse onSuccess,
             TebexApi.ServerErrorCallback onServerError = null)
         {
-            if (Cache.Instance.HasValid("packages"))
+            try
             {
-                onSuccess.Invoke((List<TebexApi.Package>)Cache.Instance.Get("packages").Value);
-            }
-            else
-            {
-                // Updates both packages and shortcodes in the cache
-                RefreshListings((code, body) =>
+                if (Cache.Instance.HasValid("packages"))
                 {
                     onSuccess.Invoke((List<TebexApi.Package>)Cache.Instance.Get("packages").Value);
-                });
+                }
+                else
+                {
+                    // Updates both packages and shortcodes in the cache
+                    RefreshListings((code, body) =>
+                    {
+                        onSuccess.Invoke((List<TebexApi.Package>)Cache.Instance.Get("packages").Value);
+                    });
+                }
+            }
+            catch (Exception e) //FIXME reports of very infuriating NPE in this func
+            {
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Raised exception while refreshing packages", new Dictionary<string, string>
+                {
+                    {"cacheHasValid", Cache.Instance.HasValid("packages").ToString()},
+                    {"error", e.Message},
+                    {"trace", e.StackTrace}
+                }));
+                LogError("An error occurred while getting your store's packages. This has been reported automatically.");
             }
         }
 
+        // Periodically keeps store info updated from the API
+        public void RefreshStoreInformation()
+        {
+            // Calling places the information in the cache
+            FetchStoreInfo((info => { })); //NOOP
+        }
+        
         public void ProcessJoinQueue()
         {
             if (_eventQueue.Count > 0)
@@ -314,10 +337,19 @@ namespace Tebex.Adapters
                         _eventQueue.Clear();
                     }, error =>
                     {
+                        ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("API error while processing join queue", new Dictionary<string, string>()
+                        {
+                            {"error",error.ErrorMessage},
+                        }));
                         LogError($"Could not process join queue - error response from API: {error.ErrorMessage}");
                     },
                     (code, body) =>
                     {
+                        ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Server error while processing join queue", new Dictionary<string, string>()
+                        {
+                            {"code",code.ToString()},
+                            {"responseBody",body},
+                        }));
                         LogError("Could not process join queue - unexpected server error.");
                         LogError(body);
                     });
@@ -361,6 +393,11 @@ namespace Tebex.Adapters
                         var offlineCommands = JsonConvert.DeserializeObject<TebexApi.OfflineCommandsResponse>(offlineCommandsBody);
                         if (offlineCommands == null)
                         {
+                            ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Failed to parse offline commands response body", new Dictionary<string, string>()
+                            {
+                                {"code", code.ToString()},
+                                {"responseBody", offlineCommandsBody}
+                            }));
                             LogError("Failed to get offline commands. Could not parse response from API. Response body follows:");
                             LogError(offlineCommandsBody);
                             return;
@@ -379,9 +416,19 @@ namespace Tebex.Adapters
                         }
                     }, (error) =>
                     {
+                        ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Error response from API while processing offline commands", new Dictionary<string, string>()
+                        {
+                            {"error",error.ErrorMessage},
+                            {"errorCode", error.ErrorCode.ToString()}
+                        }));
                         LogError($"Error response from API while processing offline commands: {error.ErrorMessage}");
                     }, (offlineComandsCode, offlineCommandsServerError) =>
                     {
+                        ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Server error from API while processing offline commands", new Dictionary<string, string>()
+                        {
+                            {"code", offlineComandsCode.ToString()},
+                            {"responseBody", offlineCommandsServerError}
+                        }));
                         LogError("Unexpected error response from API while processing offline commands");
                         LogError(offlineCommandsServerError);
                     });
@@ -411,8 +458,14 @@ namespace Tebex.Adapters
                                     onlineCommandsResponseBody);
                             if (onlineCommands == null)
                             {
-                                LogError(
-                                    $"> Failed to get online commands for ${duePlayer.Name}. Could not unmarshal response from API.");
+                                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Could not parse response from API while processing online commands of player", new Dictionary<string, string>()
+                                {
+                                    {"playerName", duePlayer.Name},
+                                    {"code", onlineCommandsCode.ToString()},
+                                    {"responseBody", onlineCommandsResponseBody}
+                                }));
+                                
+                                LogError($"> Failed to get online commands for ${duePlayer.Name}. Could not unmarshal response from API.");
                                 return;
                             }
 
@@ -438,12 +491,24 @@ namespace Tebex.Adapters
                             }
                         }, tebexError => // Error for this player's online commands
                         {
+                            ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("API responded with error while processing online player's commands", new Dictionary<string, string>()
+                            {
+                                {"playerName", duePlayer.Name},
+                                {"code", tebexError.ErrorCode.ToString()},
+                                {"message", tebexError.ErrorMessage}
+                            }));
+                            
                             LogError("Failed to get due online commands due to error response from API.");
                             LogError(tebexError.ErrorMessage);
                         });
                 }
             }, tebexError => // Error for get due players
             {
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("API responded with error while getting due players", new Dictionary<string, string>()
+                {
+                    {"code", tebexError.ErrorCode.ToString()},
+                    {"message", tebexError.ErrorMessage}
+                }));
                 LogError("Failed to get due players due to error response from API.");
                 LogError(tebexError.ErrorMessage);
             });
@@ -519,9 +584,29 @@ namespace Tebex.Adapters
             TebexApi.ApiSuccessCallback onSuccess, TebexApi.ApiErrorCallback onApiError,
             TebexApi.ServerErrorCallback onServerError);
 
+        public abstract TebexTriage.AutoTriageEvent FillAutoTriageParameters(TebexTriage.AutoTriageEvent partialEvent);
+        
         public void ReportAutoTriageEvent(TebexTriage.AutoTriageEvent autoTriageEvent)
         {
-            MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.ToString(autoTriageEvent),
+            // Determine store name
+            // Determine the store info, if we have it.
+            var storeName = "";
+            var storeUrl = "";
+            
+            if (Cache.Instance.HasValid("information"))
+            {
+                TebexApi.TebexStoreInfo storeInfo = (TebexApi.TebexStoreInfo)Cache.Instance.Get("information").Value;
+                storeName = storeInfo.AccountInfo.Name;
+                storeUrl = storeInfo.AccountInfo.Domain;
+            }
+
+            autoTriageEvent.StoreName = storeName;
+            autoTriageEvent.StoreUrl = storeUrl;
+            
+            // Fill missing params using the framework adapter
+            autoTriageEvent = FillAutoTriageParameters(autoTriageEvent);
+            
+            MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.SerializeObject(autoTriageEvent),
                 TebexApi.HttpVerb.POST,
                 (code, body) =>
                 {
@@ -535,19 +620,34 @@ namespace Tebex.Adapters
                 });
         }
 
-        public void ReportManualTriageEvent(TebexTriage.ReportedTriageEvent reportedTriageEvent)
+        public void ReportManualTriageEvent(TebexTriage.ReportedTriageEvent reportedTriageEvent, TebexApi.ApiSuccessCallback onSuccess, TebexApi.ServerErrorCallback onError)
         {
+            var storeName = "";
+            var storeUrl = "";
+            
+            if (Cache.Instance.HasValid("information"))
+            {
+                TebexApi.TebexStoreInfo storeInfo = (TebexApi.TebexStoreInfo)Cache.Instance.Get("information").Value;
+                storeName = storeInfo.AccountInfo.Name;
+                storeUrl = storeInfo.AccountInfo.Domain;
+            }
+
+            reportedTriageEvent.StoreName = storeName;
+            reportedTriageEvent.StoreUrl = storeUrl;
+            
             MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.SerializeObject(reportedTriageEvent),
                 TebexApi.HttpVerb.POST,
                 (code, body) =>
                 {
-                    LogDebug("Successfully submitted auto triage event");
+                    LogDebug("Successfully submitted manual triage event");
+                    onSuccess(code, body);
                 }, (error) =>
                 {
                     LogDebug("Triage API responded with error: " + error.ErrorMessage);
                 }, (code, body) =>
                 {
-                    LogDebug("Triage API encountered a server error while submitting triage event: " + body);
+                    LogDebug("Triage API encountered a server error while submitting manual triage event: " + body);
+                    onError(code, body);
                 });
         }
     }

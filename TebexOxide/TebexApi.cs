@@ -9,7 +9,7 @@ namespace Tebex.API
     public class TebexApi
     {
         public static readonly string TebexApiBase = "https://plugin.tebex.io/";
-        public static readonly string TebexTriageUrl = "https://triage.tebex.workers.dev/";
+        public static readonly string TebexTriageUrl = "https://plugin-logs.tebex.io/";
         
         public static TebexApi Instance => _apiInstance.Value;
         public static BaseTebexAdapter Adapter { get; private set; }
