@@ -47,6 +47,13 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
             
+            // Register user permissions
+            permission.RegisterPermission("tebex.info", this);
+            permission.RegisterPermission("tebex.categories", this);
+            permission.RegisterPermission("tebex.packages", this);
+            permission.RegisterPermission("tebex.checkout", this);
+            permission.RegisterPermission("tebex.stats", this);
+            
             // Check if secret key has been set. If so, get store information and place in cache
             if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here")
             {
@@ -240,6 +247,12 @@ namespace Oxide.Plugins
         [Command("tebex.info", "tebex:info", "tebex.information", "tebex:information")]
         private void TebexInfoCommand(IPlayer player, string command, string[] args)
         {
+            if (!player.HasPermission(command))
+            {
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
+                return;
+            }
+            
             _adapter.ReplyPlayer(player, "Getting store information...");
             _adapter.FetchStoreInfo(info =>
             {
@@ -253,6 +266,12 @@ namespace Oxide.Plugins
         [Command("tebex.checkout", "tebex:checkout")]
         private void TebexCheckoutCommand(IPlayer player, string command, string[] args)
         {
+            if (!player.HasPermission(command))
+            {
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
+                return;
+            }
+            
             if (player.IsServer)
             {
                 _adapter.ReplyPlayer(player, $"{command} cannot be executed via server. Use tebex:sendlink <username> <packageId> to specify a target player.");
@@ -312,9 +331,9 @@ namespace Oxide.Plugins
         [Command("tebex.forcecheck", "tebex:forcecheck")]
         private void TebexForceCheckCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission("tebex.forcecheck"))
+            if (!player.HasPermission(command))
             {
-                _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
 
@@ -324,9 +343,9 @@ namespace Oxide.Plugins
         [Command("tebex.refresh", "tebex:refresh")]
         private void TebexRefreshCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission("tebex.refresh"))
+            if (!player.HasPermission(command))
             {
-                _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
             
@@ -348,9 +367,9 @@ namespace Oxide.Plugins
         [Command("tebex.report", "tebex:report")]
         private void TebexReportCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission("tebex.report"))
+            if (!player.HasPermission(command))
             {
-                _adapter.ReplyPlayer(player, $"{command} can only be used by administrators.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
             
@@ -443,6 +462,12 @@ namespace Oxide.Plugins
         [Command("tebex.categories", "tebex:categories", "tebex.listings", "tebex:listings")]
         private void TebexCategoriesCommand(IPlayer player, string command, string[] args)
         {
+            if (!player.HasPermission(command))
+            {
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
+                return;
+            }
+            
             _adapter.GetCategories(categories =>
             {
                 PrintCategories(player, categories);
@@ -452,6 +477,12 @@ namespace Oxide.Plugins
         [Command("tebex.packages", "tebex:packages")]
         private void TebexPackagesCommand(IPlayer player, string command, string[] args)
         {
+            if (!player.HasPermission(command))
+            {
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
+                return;
+            }
+            
             _adapter.GetPackages(packages =>
             {
                 PrintPackages(player, packages);
@@ -461,9 +492,9 @@ namespace Oxide.Plugins
         [Command("tebex.lookup", "tebex:lookup")]
         private void TebexLookupCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission("tebex.lookup"))
+            if (!player.HasPermission(command))
             {
-                _adapter.ReplyPlayer(player, "You do not have permission to run this command.");
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
             
