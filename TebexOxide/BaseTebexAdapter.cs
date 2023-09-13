@@ -89,7 +89,12 @@ namespace Tebex.Adapters
         
         public class TebexConfig
         {
+            // Enables additional debug logging, which may show raw user info in console.
             public bool DebugMode = false;
+
+            // Automatically sends detected issues to Tebex 
+            public bool AutoReportingEnabled = true;
+            
             //public bool AllowGui = false;
             public string SecretKey = "your-secret-key-here";
             public int CacheLifetime = 30;
@@ -588,6 +593,11 @@ namespace Tebex.Adapters
         
         public void ReportAutoTriageEvent(TebexTriage.AutoTriageEvent autoTriageEvent)
         {
+            if (!PluginConfig.AutoReportingEnabled)
+            {
+                return;
+            }
+            
             // Determine store name
             // Determine the store info, if we have it.
             var storeName = "";
