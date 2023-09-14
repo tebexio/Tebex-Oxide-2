@@ -21,6 +21,9 @@ namespace Tebex.Adapters
         
         /** For storing successfully executed commands and deleting them from API */
         protected static readonly List<TebexApi.Command> ExecutedCommands = new List<TebexApi.Command>();
+
+        /** Allow pausing all web requests if rate limits are received from remote */
+        protected bool IsRateLimited = false;
         
         public abstract void Init();
 

@@ -23,6 +23,13 @@ namespace Tebex.Adapters
         public override void Init()
         {
             // Initialize timers, hooks, etc. here
+            
+            /*
+             * NOTE: We have noticed interesting behavior with plugin timers here in that Rust attempts to "catch up"
+             *  on events that it missed instead of skipping ticks in the event of sleep, lag, etc. This caused
+             *  hundreds of events to fire simultaneously for our timers. To handle this we will rate limit the plugin's
+             *  requests when a 429 is received.
+             */
             Plugin.PluginTimers().Every(121.0f, ProcessCommandQueue);
             Plugin.PluginTimers().Every(60.0f, DeleteExecutedCommands);
             Plugin.PluginTimers().Every(60.0f, ProcessJoinQueue);
@@ -80,6 +87,12 @@ namespace Tebex.Adapters
             var logOutStr = $"-> {method.ToString()} {url} | {body}";
             LogDebug(logOutStr);
 
+            if (IsRateLimited)
+            {
+                LogDebug("Skipping web request as rate limiting is enabled.");
+                return;
+            }
+            
             Plugin.WebRequests().Enqueue(url, body, (code, response) =>
             {
                 var logInStr = $"{code} <- {method.ToString()} {url}";
@@ -95,13 +108,29 @@ namespace Tebex.Adapters
                     LogInfo("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
                     LogInfo("Set up your store and get your secret key at https://tebex.io/");
                 }
+                else if (code == 429) // Rate limited
+                {
+                    if (url.Contains(TebexApi.TebexTriageUrl)) // Rate limits sent by log server are ignored
+                    {
+                        return;
+                    }
+                    
+                    // Rate limits sent from Tebex enforce a 5 minute cooldown.
+                    LogWarning("We are being rate limited by Tebex API. If this issue continues, please report a problem.");
+                    LogWarning("Requests will resume after 5 minutes.");
+                    Plugin.PluginTimers().Once(60 * 5, () =>
+                    {
+                        LogDebug("Rate limit timer has elapsed.");
+                        IsRateLimited = false;
+                    });
+                }
                 else if (code == 500)
                 {
                     ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Internal server error from Plugin API",
                         new Dictionary<string, string>
                         {
-                            { "request", logInStr },
-                            { "response", logOutStr },
+                            { "request", logOutStr },
+                            { "response", logInStr },
                         }));
                     LogError(
                         "Internal Server Error from Tebex API. Please try again later. Error details follow below.");
@@ -113,8 +142,8 @@ namespace Tebex.Adapters
                     ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Request timeout to Plugin API",
                         new Dictionary<string, string>
                         {
-                            { "request", logInStr },
-                            { "response", logOutStr },
+                            { "request", logOutStr },
+                            { "response", logInStr },
                         }));
                     LogError("Request Timeout from Tebex API. Please try again later.");
                 }
@@ -128,8 +157,8 @@ namespace Tebex.Adapters
                             ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
                                 "Plugin API reported general failure", new Dictionary<string, string>
                                 {
-                                    { "request", logInStr },
-                                    { "response", logOutStr },
+                                    { "request", logOutStr },
+                                    { "response", logInStr },
                                 }));
                             onApiError?.Invoke(error);
                         }
@@ -138,8 +167,8 @@ namespace Tebex.Adapters
                             ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
                                 "Plugin API error could not be interpreted!", new Dictionary<string, string>
                                 {
-                                    { "request", logInStr },
-                                    { "response", logOutStr },
+                                    { "request", logOutStr },
+                                    { "response", logInStr },
                                 }));
                             LogError($"Failed to unmarshal an expected error response from API.");
                             onServerError?.Invoke(code, response);
@@ -153,8 +182,8 @@ namespace Tebex.Adapters
                         ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
                             "Did not handle error response from API", new Dictionary<string, string>
                             {
-                                { "request", logInStr },
-                                { "response", logOutStr },
+                                { "request", logOutStr },
+                                { "response", logInStr },
                             }));
                         LogError("Could not gracefully handle error response.");
                         LogError($"Response from remote {response}");
