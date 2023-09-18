@@ -14,7 +14,7 @@ using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.2a")]
+    [Info("Tebex", "Tebex", "2.0.0b")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
@@ -22,7 +22,7 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.2a";
+            return "2.0.2b";
         }
         
         private void Init()
@@ -247,7 +247,8 @@ namespace Oxide.Plugins
             // Any failure to set secret key is logged to console automatically
             _adapter.FetchStoreInfo(info =>
             {
-                _adapter.ReplyPlayer(player, $"This server is now registered as server {info.ServerInfo.Name} for the web store {info.AccountInfo.Name}");
+                _adapter.ReplyPlayer(player, $"Successfully set your secret key.");
+                _adapter.ReplyPlayer(player, $"Store set as: {info.ServerInfo.Name} for the web store {info.AccountInfo.Name}");
             });
         }
 
@@ -344,7 +345,10 @@ namespace Oxide.Plugins
                 return;
             }
 
-            _adapter.ProcessCommandQueue();
+            _adapter.RefreshStoreInformation(true);
+            _adapter.ProcessCommandQueue(true);
+            _adapter.ProcessJoinQueue(true);
+            _adapter.DeleteExecutedCommands(true);
         }
 
         [Command("tebex.refresh", "tebex:refresh")]
@@ -408,7 +412,7 @@ namespace Oxide.Plugins
                 
                 _adapter.ReportManualTriageEvent(triageEvent, (code, body) =>
                 {
-                    _adapter.ReplyPlayer(player, "Submitted your report to the Tebex team. Thank you!");
+                    _adapter.ReplyPlayer(player, "Your report has been sent. Thank you!");
                 }, (code, body) =>
                 {
                     _adapter.ReplyPlayer(player, "An error occurred while submitting your report. Please contact our support team directly.");

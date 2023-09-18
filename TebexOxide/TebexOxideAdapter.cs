@@ -30,10 +30,22 @@ namespace Tebex.Adapters
              *  hundreds of events to fire simultaneously for our timers. To handle this we will rate limit the plugin's
              *  requests when a 429 is received.
              */
-            Plugin.PluginTimers().Every(121.0f, ProcessCommandQueue);
-            Plugin.PluginTimers().Every(60.0f, DeleteExecutedCommands);
-            Plugin.PluginTimers().Every(60.0f, ProcessJoinQueue);
-            Plugin.PluginTimers().Every(60.0f * 30, RefreshStoreInformation); // Every 30 minutes for store info
+            Plugin.PluginTimers().Every(121.0f, () =>
+            {
+                ProcessCommandQueue(false);
+            });
+            Plugin.PluginTimers().Every(61.0f, () =>
+            {
+                DeleteExecutedCommands(false);
+            });
+            Plugin.PluginTimers().Every(61.0f, () =>
+            {
+                ProcessJoinQueue(false);
+            });
+            Plugin.PluginTimers().Every((60.0f * 15) + 1.0f, () =>  // Every 15 minutes for store info
+            {
+                RefreshStoreInformation(false);
+            });
         }
 
         public override void LogWarning(string message)
@@ -95,7 +107,7 @@ namespace Tebex.Adapters
             
             Plugin.WebRequests().Enqueue(url, body, (code, response) =>
             {
-                var logInStr = $"{code} <- {method.ToString()} {url}";
+                var logInStr = $"{code} | '{response}' <- {method.ToString()} {url}";
                 LogDebug(logInStr);
 
                 if (code == 200 || code == 201 || code == 202 || code == 204)
@@ -104,9 +116,12 @@ namespace Tebex.Adapters
                 }
                 else if (code == 403) // Admins get a secret key warning on any command that's rejected
                 {
-                    LogInfo("Your server's secret key is either not set or incorrect.");
-                    LogInfo("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
-                    LogInfo("Set up your store and get your secret key at https://tebex.io/");
+                    if (url.Contains(TebexApi.TebexApiBase))
+                    {
+                        LogInfo("Your server's secret key is either not set or incorrect.");
+                        LogInfo("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
+                        LogInfo("Set up your store and get your secret key at https://tebex.io/");
+                    }
                 }
                 else if (code == 429) // Rate limited
                 {
@@ -246,7 +261,9 @@ namespace Tebex.Adapters
             // Cast down to the base player in order to get inventory slots available.
             try
             {
+                LogDebug($"Have player object for inventory slot check: {playerObj.GetType().FullName}");
                 Player player = playerObj as Player;
+                LogDebug($"Player object after cast inventory slot check: {player}");
 
                 var slotsAvailable = player.Inventory(player.FindById(command.Player.Id)).containerMain.availableSlots
                     .Count;
@@ -267,8 +284,9 @@ namespace Tebex.Adapters
                     {"exception", e.Message},
                     {"trace", e.StackTrace},
                 }));
-                LogError("Failed to run check for command conditions.");
+                LogError("Failed to run check for command conditions. Command run is aborted.");
                 LogError(e.ToString());
+                return;
             }
 
             // Pass through to offline command as it also verifies timing conditions
@@ -279,9 +297,9 @@ namespace Tebex.Adapters
         public override string ExpandOfflineVariables(string input, TebexApi.PlayerInfo info)
         {
             string parsed = input;
-            parsed.Replace("{id}", info.Id);
-            parsed.Replace("{username}", info.Username);
-            parsed.Replace("{name}", info.Username);
+            parsed = parsed.Replace("{id}", info.Id);
+            parsed = parsed.Replace("{username}", info.Username);
+            parsed = parsed.Replace("{name}", info.Username);
 
             if (parsed.Contains("{") || parsed.Contains("}"))
             {
@@ -311,9 +329,9 @@ namespace Tebex.Adapters
             }
 
             string parsed = input;
-            parsed.Replace("{id}", iPlayer.Id);
-            parsed.Replace("{username}", iPlayer.Name);
-            parsed.Replace("{name}", iPlayer.Name);
+            parsed = parsed.Replace("{id}", iPlayer.Id);
+            parsed = parsed.Replace("{username}", iPlayer.Name);
+            parsed = parsed.Replace("{name}", iPlayer.Name);
 
             if (parsed.Contains("{") || parsed.Contains("}"))
             {

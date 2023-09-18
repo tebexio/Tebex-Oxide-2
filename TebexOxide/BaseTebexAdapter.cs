@@ -15,8 +15,13 @@ namespace Tebex.Adapters
         public static TebexConfig PluginConfig { get; set; } = new TebexConfig();
         
         /** For rate limiting command queue based on next_check */
-        private static DateTime _nextCheck = DateTime.Now;
-
+        private static DateTime _nextCheckCommandQueue = DateTime.Now;
+        
+        // Time checks for our plugin timers.
+        private static DateTime _nextCheckDeleteCommands = DateTime.Now;
+        private static DateTime _nextCheckJoinQueue = DateTime.Now;
+        private static DateTime _nextCheckRefresh = DateTime.Now;
+        
         private static List<TebexApi.TebexJoinEventInfo> _eventQueue = new List<TebexApi.TebexJoinEventInfo>();
         
         /** For storing successfully executed commands and deleting them from API */
@@ -27,16 +32,23 @@ namespace Tebex.Adapters
         
         public abstract void Init();
 
-        public void DeleteExecutedCommands()
+        public void DeleteExecutedCommands(bool ignoreWaitCheck = false)
         {
-            LogDebug("Checking for completed commands...");
+            LogDebug("Deleting executed commands...");
+            
+            if (!CanProcessNextDeleteCommands() && !ignoreWaitCheck)
+            {
+                LogDebug("Skipping check for completed commands - not time to be processed");
+                return;
+            }
+            
             if (ExecutedCommands.Count == 0)
             {
-                LogDebug("No commands to flush.");
+                LogDebug("  No commands to flush.");
                 return;
             }
 
-            LogDebug($"Found {ExecutedCommands.Count} commands to flush.");
+            LogDebug($"  Found {ExecutedCommands.Count} commands to flush.");
 
             List<int> ids = new List<int>();
             foreach (var command in ExecutedCommands)
@@ -44,6 +56,7 @@ namespace Tebex.Adapters
                 ids.Add(command.Id);
             }
 
+            _nextCheckDeleteCommands = DateTime.Now.AddSeconds(60);
             TebexApi.Instance.DeleteCommands(ids.ToArray(), (code, body) =>
             {
                 LogInfo("Successfully flushed completed commands.");
@@ -328,17 +341,35 @@ namespace Tebex.Adapters
         }
 
         // Periodically keeps store info updated from the API
-        public void RefreshStoreInformation()
+        public void RefreshStoreInformation(bool ignoreWaitCheck = false)
         {
+            LogDebug("Refreshing store information...");
+            
             // Calling places the information in the cache
-            FetchStoreInfo((info => { })); //NOOP
+            if (!CanProcessNextRefresh() && !ignoreWaitCheck)
+            {
+                LogDebug("  Skipping store info refresh - not time to be processed");
+                return;
+            }
+            
+            _nextCheckRefresh = DateTime.Now.AddMinutes(15);
+            FetchStoreInfo(info => { });
         }
         
-        public void ProcessJoinQueue()
+        public void ProcessJoinQueue(bool ignoreWaitCheck = false)
         {
+            LogDebug("Processing player join queue...");
+            
+            if (!CanProcessNextJoinQueue() && !ignoreWaitCheck)
+            {
+                LogDebug("  Skipping join queue - not time to be processed");
+                return;
+            }
+            
+            _nextCheckJoinQueue = DateTime.Now.AddSeconds(60);
             if (_eventQueue.Count > 0)
             {
-                LogDebug("Processing join queue...");
+                LogDebug($"  Found {_eventQueue.Count} join events.");
                 TebexApi.Instance.PlayerJoinEvent(_eventQueue, (code, body) =>
                     {
                         LogDebug("Join queue cleared successfully.");
@@ -362,19 +393,40 @@ namespace Tebex.Adapters
                         LogError(body);
                     });
             }
+            else // Empty queue
+            {
+                LogDebug($"  No recent join events.");
+            }
         }
         
         public bool CanProcessNextCommandQueue()
         {
-            return DateTime.Now > _nextCheck;
+            return DateTime.Now > _nextCheckCommandQueue;
         }
 
-        public void ProcessCommandQueue()
+        public bool CanProcessNextDeleteCommands()
         {
-            if (!CanProcessNextCommandQueue())
+            return DateTime.Now > _nextCheckDeleteCommands;
+        }
+        
+        public bool CanProcessNextJoinQueue()
+        {
+            return DateTime.Now > _nextCheckJoinQueue;
+        }
+        
+        public bool CanProcessNextRefresh()
+        {
+            return DateTime.Now > _nextCheckRefresh;
+        }
+        
+        public void ProcessCommandQueue(bool ignoreWaitCheck = false)
+        {
+            LogDebug("Processing command queue...");
+            
+            if (!CanProcessNextCommandQueue() && !ignoreWaitCheck)
             {
-                var secondsToWait = (int)(_nextCheck - DateTime.Now).TotalSeconds;
-                LogError($"Tried to run command queue, but should wait another {secondsToWait} seconds.");
+                var secondsToWait = (int)(_nextCheckCommandQueue - DateTime.Now).TotalSeconds;
+                LogDebug($"  Tried to run command queue, but should wait another {secondsToWait} seconds.");
                 return;
             }
 
@@ -390,7 +442,7 @@ namespace Tebex.Adapters
                 }
 
                 // Set next available check time
-                _nextCheck = DateTime.Now.AddSeconds(response.Meta.NextCheck);
+                _nextCheckCommandQueue = DateTime.Now.AddSeconds(response.Meta.NextCheck);
 
                 // Process offline commands immediately
                 if (response.Meta != null && response.Meta.ExecuteOffline)
@@ -443,7 +495,7 @@ namespace Tebex.Adapters
                 }
                 else
                 {
-                    LogInfo("No offline commands to execute.");
+                    LogDebug("No offline commands to execute.");
                 }
 
                 // Process any online commands 
