@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Microsoft.VisualBasic;
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
@@ -227,17 +228,32 @@ namespace Tebex.Adapters
                 Plugin.PluginTimers().Once(command.Conditions.Delay,
                     () =>
                     {
-                        Plugin.Server().Command(commandName, args);
-                        ExecutedCommands.Add(command);
+                        ExecuteServerCommand(command, commandName, args);
                     });
             }
             else // No delay, execute immediately
             {
-                Plugin.Server().Command(commandName, args);
-                ExecutedCommands.Add(command);
+                ExecuteServerCommand(command, commandName, args);
             }
         }
 
+        private void ExecuteServerCommand(TebexApi.Command command, string commandName, string[] args)
+        {
+            // For the say command, don't pass args or they will all get quoted in chat.
+            if (commandName.Contains("say"))
+            {
+                var fullCommand = $"{commandName} {Strings.Join(args, " ")}";
+                LogDebug($"Executing full say command: '${fullCommand}'");
+                Plugin.Server().Command(fullCommand);
+            }
+            else
+            {
+                Plugin.Server().Command(commandName, args);
+            }
+            
+            ExecutedCommands.Add(command);
+        }
+        
         public override bool IsPlayerOnline(string playerRefId)
         {
             IPlayer iPlayer = GetPlayerRef(playerRefId) as IPlayer;
