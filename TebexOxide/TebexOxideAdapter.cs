@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Microsoft.VisualBasic;
+using ConVar;
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Game.Rust.Libraries;
+using Oxide.Game.Rust.Libraries.Covalence;
 using Tebex.API;
 using Oxide.Plugins;
 using Tebex.Triage;
@@ -219,7 +220,7 @@ namespace Tebex.Adapters
             }
         }
 
-        public override void ExecuteOfflineCommand(TebexApi.Command command, string commandName, string[] args)
+        public override void ExecuteOfflineCommand(TebexApi.Command command, object player, string commandName, string[] args)
         {
             if (command.Conditions.Delay > 0)
             {
@@ -228,30 +229,39 @@ namespace Tebex.Adapters
                 Plugin.PluginTimers().Once(command.Conditions.Delay,
                     () =>
                     {
-                        ExecuteServerCommand(command, commandName, args);
+                        ExecuteServerCommand(command, player as IPlayer, commandName, args);
                     });
             }
             else // No delay, execute immediately
             {
-                ExecuteServerCommand(command, commandName, args);
+                ExecuteServerCommand(command, player as IPlayer, commandName, args);
             }
         }
 
-        private void ExecuteServerCommand(TebexApi.Command command, string commandName, string[] args)
+        private void ExecuteServerCommand(TebexApi.Command command, IPlayer player, string commandName, string[] args)
         {
             // For the say command, don't pass args or they will all get quoted in chat.
-            if (commandName.Contains("say"))
+            if (commandName.Equals("chat.add") && args.Length >= 2 && player != null && args[0].ToString().Equals(player.Id))
             {
-                var fullCommand = $"{commandName} {Strings.Join(args, " ")}";
-                LogDebug($"Executing full say command: '${fullCommand}'");
-                Plugin.Server().Command(fullCommand);
+                var message = string.Join(" ", args.Skip(2));
+                
+                // Remove leading and trailing quotes if present
+                if (message.StartsWith('"'))
+                {
+                    message = message.Substring(1, message.Length - 1);
+                }
+
+                if (message.EndsWith('"'))
+                {
+                    message = message.Substring(0, message.Length - 1);
+                }
+                
+                player.Message(message);
+                return;
             }
-            else
-            {
-                Plugin.Server().Command(commandName, args);
-            }
-            
-            ExecutedCommands.Add(command);
+
+            var fullCommand = $"{commandName} {string.Join(" ", args)}";
+            Plugin.Server().Command(fullCommand);
         }
         
         public override bool IsPlayerOnline(string playerRefId)
@@ -271,43 +281,56 @@ namespace Tebex.Adapters
             return Plugin.PlayerManager().FindPlayer(playerId);
         }
 
-        public override void ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName,
+        public override bool ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName,
             string[] args)
         {
-            // Cast down to the base player in order to get inventory slots available.
             try
             {
-                LogDebug($"Have player object for inventory slot check: {playerObj.GetType().FullName}");
-                Player player = playerObj as Player;
-                LogDebug($"Player object after cast inventory slot check: {player}");
-
-                var slotsAvailable = player.Inventory(player.FindById(command.Player.Id)).containerMain.availableSlots
-                    .Count;
-
-                // Some commands have slot requirements, don't execute those if the player can't accept it
-                if (slotsAvailable < command.Conditions.Slots)
+                if (command.Conditions.Slots > 0)
                 {
-                    LogInfo(
-                        $"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
-                    return;
+                    // Cast down to the base player in order to get inventory slots available.
+                    var player = playerObj as Oxide.Game.Rust.Libraries.Covalence.RustPlayer;
+                    BasePlayer basePlayer = player.Object as BasePlayer;
+                    var slotsAvailable = basePlayer.inventory.containerMain.availableSlots.Count;
+
+                    // Some commands have slot requirements, don't execute those if the player can't accept it
+                    if (slotsAvailable < command.Conditions.Slots)
+                    {
+                        LogInfo(
+                            $"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
+                        return false;
+                    }
+                }
+                
+                if (command.Conditions.Delay > 0)
+                {
+                    // Command requires a delay, use built-in plugin timer to wait until callback
+                    // in order to respect game threads
+                    Plugin.PluginTimers().Once(command.Conditions.Delay,
+                        () =>
+                        {
+                            ExecuteServerCommand(command, playerObj as IPlayer, commandName, args);
+                        });
+                }
+                else
+                {
+                    ExecuteServerCommand(command, playerObj as IPlayer, commandName, args);    
                 }
             }
             catch (Exception e)
             {
-                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Caused exception while checking command conditions", new Dictionary<string, string>()
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Caused exception while executing online command", new Dictionary<string, string>()
                 {
                     {"command", command.CommandToRun},
                     {"exception", e.Message},
                     {"trace", e.StackTrace},
                 }));
-                LogError("Failed to run check for command conditions. Command run is aborted.");
+                LogError("Failed to run online command due to exception. Command run is aborted.");
                 LogError(e.ToString());
-                return;
+                return false;
             }
-
-            // Pass through to offline command as it also verifies timing conditions
-            LogInfo($"> Executing command {commandName}");
-            ExecuteOfflineCommand(command, commandName, args);
+            
+            return true;
         }
 
         public override string ExpandOfflineVariables(string input, TebexApi.PlayerInfo info)
@@ -357,41 +380,6 @@ namespace Tebex.Adapters
             }
 
             return parsed;
-        }
-
-        public List<string> ReadLastLinesFromFile(string filePath, int nLines)
-        {
-            List<string> result = new List<string>(nLines);
-            Queue<string> lineQueue = new Queue<string>(nLines);
-
-            try
-            {
-                using (StreamReader reader = new StreamReader(filePath))
-                {
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (lineQueue.Count == nLines)
-                        {
-                            lineQueue.Dequeue();
-                        }
-
-                        lineQueue.Enqueue(line);
-                    }
-                }
-
-                result.AddRange(lineQueue);
-            }
-            catch (FileNotFoundException e)
-            {
-                Console.WriteLine($"File not found: {e.Message}");
-            }
-            catch (IOException e)
-            {
-                Console.WriteLine($"IO error occurred: {e.Message}");
-            }
-
-            return result;
         }
 
         public override TebexTriage.AutoTriageEvent FillAutoTriageParameters(TebexTriage.AutoTriageEvent partialEvent)

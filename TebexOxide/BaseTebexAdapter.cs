@@ -472,7 +472,7 @@ namespace Tebex.Adapters
                             var args = splitCommand.Skip(1);
                             
                             LogInfo($"Executing offline command: `{parsedCommand}`");
-                            ExecuteOfflineCommand(command, commandName, args.ToArray());
+                            ExecuteOfflineCommand(command, null, commandName, args.ToArray());
                         }
                     }, (error) =>
                     {
@@ -545,9 +545,12 @@ namespace Tebex.Adapters
                                 var args = splitCommand.Skip(1);
                                 
                                 LogDebug($"Pre-execution: {parsedCommand}");
-                                ExecuteOnlineCommand(command, playerRef, commandName, args.ToArray());
+                                var success = ExecuteOnlineCommand(command, playerRef, commandName, args.ToArray());
                                 LogDebug($"Post-execution: {parsedCommand}");
-                                ExecutedCommands.Add(command);
+                                if (success)
+                                {
+                                    ExecutedCommands.Add(command);    
+                                }
                             }
                         }, tebexError => // Error for this player's online commands
                         {
@@ -624,8 +627,8 @@ namespace Tebex.Adapters
          */
         public abstract void ReplyPlayer(object player, string message);
 
-        public abstract void ExecuteOfflineCommand(TebexApi.Command command, string commandName, string[] args);
-        public abstract void ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName, string[] args);
+        public abstract void ExecuteOfflineCommand(TebexApi.Command command, object playerObj, string commandName, string[] args);
+        public abstract bool ExecuteOnlineCommand(TebexApi.Command command, object playerObj, string commandName, string[] args);
         
         public abstract bool IsPlayerOnline(string playerRefId);
         public abstract object GetPlayerRef(string playerId);

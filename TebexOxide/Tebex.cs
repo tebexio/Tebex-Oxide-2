@@ -22,7 +22,7 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.2b";
+            return "2.0.0b";
         }
         
         private void Init()
@@ -46,6 +46,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.report", this);
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
+            permission.RegisterPermission("tebex.debug", this);
             
             // Register user permissions
             permission.RegisterPermission("tebex.info", this);
@@ -53,7 +54,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.packages", this);
             permission.RegisterPermission("tebex.checkout", this);
             permission.RegisterPermission("tebex.stats", this);
-            
+
             // Check if auto reporting is disabled and show a warning if so.
             if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
             {
@@ -320,6 +321,7 @@ namespace Oxide.Plugins
             {
                 _adapter.ReplyPlayer(player, "-- Administrator Commands --");
                 _adapter.ReplyPlayer(player, "tebex.secret <secretKey>          - Sets your server's secret key.");
+                _adapter.ReplyPlayer(player, "tebex.debug <on/off>              - Enables or disables debug logging.");
                 _adapter.ReplyPlayer(player, "tebex.sendlink <player> <packId>  - Sends a purchase link to the provided player.");
                 _adapter.ReplyPlayer(player, "tebex.forcecheck                  - Forces the command queue to check for any pending purchases.");
                 _adapter.ReplyPlayer(player, "tebex.refresh                     - Refreshes store information, packages, categories, etc.");
@@ -334,6 +336,39 @@ namespace Oxide.Plugins
             _adapter.ReplyPlayer(player, "tebex.packages <opt:categoryId>  - Shows all item packages available in the store or provided category.");
             _adapter.ReplyPlayer(player, "tebex.checkout <packId>          - Creates a checkout link for an item. Visit to purchase.");
             _adapter.ReplyPlayer(player, "tebex.stats                      - Gets your stats from the store, purchases, subscriptions, etc.");
+        }
+
+        [Command("tebex.debug", "tebex:debug")]
+        private void TebexDebugCommand(IPlayer player, string command, string[] args)
+        {
+            if (!player.HasPermission(command))
+            {
+                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
+                return;
+            }
+
+            if (args.Length != 1)
+            {
+                _adapter.ReplyPlayer(player, "Usage: tebex.debug <on/off>");
+                return;
+            }
+
+            if (args[0].Equals("on"))
+            {
+                BaseTebexAdapter.PluginConfig.DebugMode = true;
+                Config.WriteObject(BaseTebexAdapter.PluginConfig);
+                _adapter.ReplyPlayer(player, "Debug mode is enabled.");
+            }
+            else if (args[0].Equals("off"))
+            {
+                BaseTebexAdapter.PluginConfig.DebugMode = false;
+                Config.WriteObject(BaseTebexAdapter.PluginConfig);
+                _adapter.ReplyPlayer(player, "Debug mode is disabled.");
+            }
+            else
+            {
+                _adapter.ReplyPlayer(player, "Usage: tebex.debug <on/off>");
+            }
         }
 
         [Command("tebex.forcecheck", "tebex:forcecheck")]
