@@ -114,6 +114,37 @@ namespace Tebex.Adapters
             //public bool AllowGui = false;
             public string SecretKey = "your-secret-key-here";
             public int CacheLifetime = 30;
+            
+            //#if RUST
+            [JsonProperty(PropertyName = "VIP Notes Enabled")]
+            public bool VipNotesEnabled { get; set; } = false;
+            
+            [JsonProperty(PropertyName = "VIP Codes")]
+            public List<string> VipCodes { get; set; } = new List<string>();
+            
+            [JsonProperty(PropertyName = "VIP Groups")]
+            public List<string> VipGroups { get; set; } = new List<string>();
+
+            [JsonProperty(PropertyName = "Note Spawn Chance")]
+            public float NoteSpawnChance { get; set; } = 0.02f; // 2%
+            
+            [JsonProperty(PropertyName = "Note Cooldown (Seconds)")]
+            public float NoteCooldown { get; set; } = 600; // 10 minutes
+
+            [JsonProperty(PropertyName = "Note Messages")]
+            public Dictionary<string, List<string>> NoteMessages { get; set; } = new Dictionary<string, List<string>>
+            {
+                {
+                    "en", new List<string>
+                    {
+                        "Hey {0}, grab your exclusive 10% OFF VIP offer with code {2} at {1}! Limited time only!",
+                        "{0}, seize your special discount! Use code {2} at {1} for a limited time offer!",
+                        "Special surprise for you, {0}! Use code {2} at {1} for 10% off and enjoy your VIP benefits!"
+                    }
+                },
+            };
+            
+            //#endif
         }
         
         public class Cache

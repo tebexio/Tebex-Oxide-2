@@ -6,31 +6,35 @@ using Oxide.Plugins;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Globalization;
 using Oxide.Core;
 using Oxide.Game.Rust;
 using Tebex.Adapters;
 using Tebex.API;
 using Tebex.Triage;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.0b")]
+    [Info("Tebex", "Tebex", "2.0.0")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
         private static TebexOxideAdapter _adapter;
 
+        private Dictionary<string, DateTime> lastNoteGiven = new Dictionary<string, DateTime>();
+
         public static string GetPluginVersion()
         {
-            return "2.0.0b";
+            return "2.0.0";
         }
-        
+
         private void Init()
         {
             // Setup our API and adapter
             _adapter = new TebexOxideAdapter(this);
             TebexApi.Instance.InitAdapter(_adapter);
-            
+
             BaseTebexAdapter.PluginConfig = Config.ReadObject<BaseTebexAdapter.TebexConfig>();
             if (!Config.Exists())
             {
@@ -47,7 +51,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
             permission.RegisterPermission("tebex.debug", this);
-            
+
             // Register user permissions
             permission.RegisterPermission("tebex.info", this);
             permission.RegisterPermission("tebex.categories", this);
@@ -61,20 +65,20 @@ namespace Oxide.Plugins
                 _adapter.LogInfo("Auto reporting issues to Tebex is disabled.");
                 _adapter.LogInfo("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
             }
-            
+
             // Check if secret key has been set. If so, get store information and place in cache
             if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here")
             {
                 // No-op, just to place info in the cache for any future triage events
                 _adapter.FetchStoreInfo((info => { }));
-                return;    
+                return;
             }
-            
+
             _adapter.LogInfo("Tebex detected a new configuration file.");
             _adapter.LogInfo("Use tebex:secret <secret> to add your store's secret key.");
             _adapter.LogInfo("Alternatively, add the secret key to 'Tebex.json' and reload the plugin.");
         }
-        
+
         public WebRequests WebRequests()
         {
             return webrequest;
@@ -99,7 +103,7 @@ namespace Oxide.Plugins
         {
             return game;
         }
-        
+
         public void Warn(string message)
         {
             LogWarning("{0}", message);
@@ -114,12 +118,14 @@ namespace Oxide.Plugins
         {
             Puts("{0}", info);
         }
+
         private void OnUserConnected(IPlayer player)
         {
             // Check for default config and inform the admin that configuration is waiting.
             if (player.IsAdmin && BaseTebexAdapter.PluginConfig.SecretKey == "your-secret-key-here")
             {
-                player.Command("chat.add", 0, player.Id, "Tebex is not configured. Use tebex:secret <secret> from the F1 menu to add your key.");
+                player.Command("chat.add", 0, player.Id,
+                    "Tebex is not configured. Use tebex:secret <secret> from the F1 menu to add your key.");
                 player.Command("chat.add", 0, player.Id, "Get your secret key by logging in at:");
                 player.Command("chat.add", 0, player.Id, "https://tebex.io/");
             }
@@ -127,13 +133,87 @@ namespace Oxide.Plugins
             _adapter.LogDebug($"Player login event: {player.Id}@{player.Address}");
             _adapter.OnUserConnected(player.Id, player.Address);
         }
-        
+
+        void OnLootEntity(BasePlayer player, BaseEntity entity)
+        {
+            if (!BaseTebexAdapter.PluginConfig.VipNotesEnabled)
+            {
+                return;
+            }
+            
+            // If the user configured no VIP codes, skip.
+            if (BaseTebexAdapter.PluginConfig.VipCodes.Count == 0)
+            {
+                return;
+            }
+
+            // Check if we have a target loot crate by prefab name
+            string prefabName = entity?.ShortPrefabName;
+            if (string.IsNullOrEmpty(prefabName) || (prefabName != "crate_normal_2" &&
+                                                     prefabName != "crate_normal_2_food" &&
+                                                     prefabName != "crate_normal_2_tools"))
+            {
+                return;
+            }
+
+            // Ensure the player was provided
+            string userID = player?.UserIDString;
+            if (string.IsNullOrEmpty(userID))
+            {
+                return;
+            }
+
+            // If the player is already in a VIP group, they won't receive a VIP note
+            if (BaseTebexAdapter.PluginConfig.VipGroups.Any(group => permission.UserHasGroup(userID, group)))
+            {
+                return;
+            }
+
+            // Make sure we haven't spawned a note too recently for the user.
+            if (lastNoteGiven.TryGetValue(userID, out DateTime lastGivenTime) &&
+                (DateTime.Now - lastGivenTime).Seconds < BaseTebexAdapter.PluginConfig.NoteCooldown)
+            {
+                return;
+            }
+
+            // Spawn chance check
+            if (Oxide.Core.Random.Range(0.0f, 1.0f) > BaseTebexAdapter.PluginConfig.NoteSpawnChance)
+            {
+                return;
+            }
+
+            // Create the note
+            Item item = ItemManager.CreateByName("note", 1, 0UL);
+            if (item == null)
+            {
+                return;
+            }
+
+            List<string> messages = BaseTebexAdapter.PluginConfig.NoteMessages["en"];
+            string message = messages[Oxide.Core.Random.Range(0, messages.Count)];
+            string vipCode = BaseTebexAdapter.PluginConfig.VipCodes[Oxide.Core.Random.Range(0, BaseTebexAdapter.PluginConfig.VipCodes.Count)];
+
+            var info = BaseTebexAdapter.Cache.Instance.Get("information").Value as TebexApi.TebexStoreInfo;
+            if (info != null)
+            {
+                item.text = string.Format(message, player.displayName, info.AccountInfo.Domain, vipCode);
+                item.MarkDirty();
+                player.GiveItem(item, BaseEntity.GiveItemReason.Generic);
+
+                lastNoteGiven[userID] = DateTime.Now;                
+            }
+            else
+            {
+                _adapter.LogDebug("Store information not present in cache when trying to spawn VIP note!");
+            }
+        }
+
         private void OnServerShutdown()
         {
             // Make sure join queue is always empties on shutdown
             _adapter.ProcessJoinQueue();
         }
-        
+
         private void PrintCategories(IPlayer player, List<TebexApi.Category> categories)
         {
             // Index counter for selecting displayed items
@@ -161,7 +241,8 @@ namespace Oxide.Plugins
                         // Add additional flair on sales
                         if (package.Sale != null && package.Sale.Active)
                         {
-                            _adapter.ReplyPlayer(player, $"-> [P{packIndex}] {package.Name} {package.Price - package.Sale.Discount} (SALE {package.Sale.Discount} off)");
+                            _adapter.ReplyPlayer(player,
+                                $"-> [P{packIndex}] {package.Name} {package.Price - package.Sale.Discount} (SALE {package.Sale.Discount} off)");
                         }
                         else
                         {
@@ -171,6 +252,7 @@ namespace Oxide.Plugins
                         packIndex++;
                     }
                 }
+
                 // At the end of each category add a line separator
                 _adapter.ReplyPlayer(player, "---------------------------------");
             }
@@ -197,14 +279,16 @@ namespace Oxide.Plugins
 
                 if (package.Sale != null && package.Sale.Active)
                 {
-                    _adapter.ReplyPlayer(player, $"Original Price: {package.Price} {package.GetFriendlyPayFrequency()}  SALE: {package.Sale.Discount} OFF!");
+                    _adapter.ReplyPlayer(player,
+                        $"Original Price: {package.Price} {package.GetFriendlyPayFrequency()}  SALE: {package.Sale.Discount} OFF!");
                 }
                 else
                 {
                     _adapter.ReplyPlayer(player, $"Price: {package.Price} {package.GetFriendlyPayFrequency()}");
                 }
 
-                _adapter.ReplyPlayer(player, $"Purchase with 'tebex.checkout P{packIndex}' or 'tebex.checkout {package.Id}'");
+                _adapter.ReplyPlayer(player,
+                    $"Purchase with 'tebex.checkout P{packIndex}' or 'tebex.checkout {package.Id}'");
                 _adapter.ReplyPlayer(player, "--------------------------------");
 
                 packIndex++;
@@ -220,7 +304,7 @@ namespace Oxide.Plugins
         {
             return new BaseTebexAdapter.TebexConfig();
         }
-        
+
         [Command("tebex.secret", "tebex:secret")]
         private void TebexSecretCommand(IPlayer player, string command, string[] args)
         {
@@ -231,13 +315,13 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "If you are an admin, grant permission to use `tebex.secret`");
                 return;
             }
-            
+
             if (args.Length != 1)
             {
                 _adapter.ReplyPlayer(player, "Invalid syntax. Usage: \"tebex.secret <secret>\"");
                 return;
             }
-            
+
             _adapter.ReplyPlayer(player, "Setting your secret key...");
             BaseTebexAdapter.PluginConfig.SecretKey = args[0];
             Config.WriteObject(BaseTebexAdapter.PluginConfig);
@@ -249,7 +333,8 @@ namespace Oxide.Plugins
             _adapter.FetchStoreInfo(info =>
             {
                 _adapter.ReplyPlayer(player, $"Successfully set your secret key.");
-                _adapter.ReplyPlayer(player, $"Store set as: {info.ServerInfo.Name} for the web store {info.AccountInfo.Name}");
+                _adapter.ReplyPlayer(player,
+                    $"Store set as: {info.ServerInfo.Name} for the web store {info.AccountInfo.Name}");
             });
         }
 
@@ -261,7 +346,7 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
+
             _adapter.ReplyPlayer(player, "Getting store information...");
             _adapter.FetchStoreInfo(info =>
             {
@@ -280,10 +365,11 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
+
             if (player.IsServer)
             {
-                _adapter.ReplyPlayer(player, $"{command} cannot be executed via server. Use tebex:sendlink <username> <packageId> to specify a target player.");
+                _adapter.ReplyPlayer(player,
+                    $"{command} cannot be executed via server. Use tebex:sendlink <username> <packageId> to specify a target player.");
                 return;
             }
 
@@ -307,10 +393,7 @@ namespace Oxide.Plugins
             {
                 player.Command("chat.add", 0, player.Id, "Please visit the following URL to complete your purchase:");
                 player.Command("chat.add", 0, player.Id, $"{checkoutUrl.Url}");
-            }, error =>
-            {
-                _adapter.ReplyPlayer(player, $"{error.ErrorMessage}");
-            });
+            }, error => { _adapter.ReplyPlayer(player, $"{error.ErrorMessage}"); });
         }
 
         [Command("tebex.help", "tebex:help")]
@@ -322,20 +405,31 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "-- Administrator Commands --");
                 _adapter.ReplyPlayer(player, "tebex.secret <secretKey>          - Sets your server's secret key.");
                 _adapter.ReplyPlayer(player, "tebex.debug <on/off>              - Enables or disables debug logging.");
-                _adapter.ReplyPlayer(player, "tebex.sendlink <player> <packId>  - Sends a purchase link to the provided player.");
-                _adapter.ReplyPlayer(player, "tebex.forcecheck                  - Forces the command queue to check for any pending purchases.");
-                _adapter.ReplyPlayer(player, "tebex.refresh                     - Refreshes store information, packages, categories, etc.");
-                _adapter.ReplyPlayer(player, "tebex.report                      - Generates a report for the Tebex support team.");
-                _adapter.ReplyPlayer(player, "tebex.ban <playerId>              - Bans a player from using your Tebex store.");
-                _adapter.ReplyPlayer(player, "tebex.lookup <playerId>           - Looks up store statistics for the given player.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.sendlink <player> <packId>  - Sends a purchase link to the provided player.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.forcecheck                  - Forces the command queue to check for any pending purchases.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.refresh                     - Refreshes store information, packages, categories, etc.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.report                      - Generates a report for the Tebex support team.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.ban <playerId>              - Bans a player from using your Tebex store.");
+                _adapter.ReplyPlayer(player,
+                    "tebex.lookup <playerId>           - Looks up store statistics for the given player.");
             }
 
             _adapter.ReplyPlayer(player, "-- User Commands --");
-            _adapter.ReplyPlayer(player, "tebex.info                       - Get information about this server's store.");
-            _adapter.ReplyPlayer(player, "tebex.categories                 - Shows all item categories available on the store.");
-            _adapter.ReplyPlayer(player, "tebex.packages <opt:categoryId>  - Shows all item packages available in the store or provided category.");
-            _adapter.ReplyPlayer(player, "tebex.checkout <packId>          - Creates a checkout link for an item. Visit to purchase.");
-            _adapter.ReplyPlayer(player, "tebex.stats                      - Gets your stats from the store, purchases, subscriptions, etc.");
+            _adapter.ReplyPlayer(player,
+                "tebex.info                       - Get information about this server's store.");
+            _adapter.ReplyPlayer(player,
+                "tebex.categories                 - Shows all item categories available on the store.");
+            _adapter.ReplyPlayer(player,
+                "tebex.packages <opt:categoryId>  - Shows all item packages available in the store or provided category.");
+            _adapter.ReplyPlayer(player,
+                "tebex.checkout <packId>          - Creates a checkout link for an item. Visit to purchase.");
+            _adapter.ReplyPlayer(player,
+                "tebex.stats                      - Gets your stats from the store, purchases, subscriptions, etc.");
         }
 
         [Command("tebex.debug", "tebex:debug")]
@@ -394,18 +488,20 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
+
             _adapter.ReplyPlayer(player, "Refreshing listings...");
             BaseTebexAdapter.Cache.Instance.Remove("packages");
             BaseTebexAdapter.Cache.Instance.Remove("categories");
-            
+
             _adapter.RefreshListings((code, body) =>
             {
-                if (BaseTebexAdapter.Cache.Instance.HasValid("packages") && BaseTebexAdapter.Cache.Instance.HasValid("categories"))
+                if (BaseTebexAdapter.Cache.Instance.HasValid("packages") &&
+                    BaseTebexAdapter.Cache.Instance.HasValid("categories"))
                 {
                     var packs = (List<TebexApi.Package>)BaseTebexAdapter.Cache.Instance.Get("packages").Value;
                     var categories = (List<TebexApi.Category>)BaseTebexAdapter.Cache.Instance.Get("categories").Value;
-                    _adapter.ReplyPlayer(player, $"Fetched {packs.Count} packages out of {categories.Count} categories");
+                    _adapter.ReplyPlayer(player,
+                        $"Fetched {packs.Count} packages out of {categories.Count} categories");
                 }
             });
         }
@@ -418,10 +514,11 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
+
             if (args.Length == 0) // require /confirm to send
             {
-                _adapter.ReplyPlayer(player, "Please run `tebex.report confirm 'Your description here'` to submit your report. The following information will be sent to Tebex: ");
+                _adapter.ReplyPlayer(player,
+                    "Please run `tebex.report confirm 'Your description here'` to submit your report. The following information will be sent to Tebex: ");
                 _adapter.ReplyPlayer(player, "- Your game version, store id, and server IP.");
                 _adapter.ReplyPlayer(player, "- Your username and IP address.");
                 _adapter.ReplyPlayer(player, "- Please include a short description of the issue you were facing.");
@@ -430,7 +527,7 @@ namespace Oxide.Plugins
             if (args.Length == 2 && args[0] == "confirm")
             {
                 _adapter.ReplyPlayer(player, "Sending your report to Tebex...");
-                
+
                 var triageEvent = new TebexTriage.ReportedTriageEvent();
                 triageEvent.GameId = $"{game} {server.Version}|{server.Protocol}";
                 triageEvent.FrameworkId = "Oxide";
@@ -440,23 +537,23 @@ namespace Oxide.Plugins
                 triageEvent.Trace = "";
                 triageEvent.Metadata = new Dictionary<string, string>()
                 {
-                
+
                 };
                 triageEvent.Username = player.Name + "/" + player.Id;
                 triageEvent.UserIp = player.Address;
-                
-                _adapter.ReportManualTriageEvent(triageEvent, (code, body) =>
-                {
-                    _adapter.ReplyPlayer(player, "Your report has been sent. Thank you!");
-                }, (code, body) =>
-                {
-                    _adapter.ReplyPlayer(player, "An error occurred while submitting your report. Please contact our support team directly.");
-                    _adapter.ReplyPlayer(player, "Error: " + body);
-                });
-                
+
+                _adapter.ReportManualTriageEvent(triageEvent,
+                    (code, body) => { _adapter.ReplyPlayer(player, "Your report has been sent. Thank you!"); },
+                    (code, body) =>
+                    {
+                        _adapter.ReplyPlayer(player,
+                            "An error occurred while submitting your report. Please contact our support team directly.");
+                        _adapter.ReplyPlayer(player, "Error: " + body);
+                    });
+
                 return;
             }
-            
+
             _adapter.ReplyPlayer(player, $"Usage: tebex.report <confirm> '<message>'");
         }
 
@@ -484,13 +581,9 @@ namespace Oxide.Plugins
 
             var reason = string.Join(" ", args.Skip(1));
             _adapter.ReplyPlayer(commandRunner, $"Processing ban for player {player.Name} with reason '{reason}'");
-            _adapter.BanPlayer(player.Name, player.Address, reason, (code, body) =>
-            {
-                _adapter.ReplyPlayer(commandRunner, "Player banned successfully.");
-            }, error =>
-            {
-                _adapter.ReplyPlayer(commandRunner, $"Could not ban player. {error.ErrorMessage}");
-            });
+            _adapter.BanPlayer(player.Name, player.Address, reason,
+                (code, body) => { _adapter.ReplyPlayer(commandRunner, "Player banned successfully."); },
+                error => { _adapter.ReplyPlayer(commandRunner, $"Could not ban player. {error.ErrorMessage}"); });
         }
 
         [Command("tebex.unban", "tebex:unban")]
@@ -513,11 +606,8 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
-            _adapter.GetCategories(categories =>
-            {
-                PrintCategories(player, categories);
-            });
+
+            _adapter.GetCategories(categories => { PrintCategories(player, categories); });
         }
 
         [Command("tebex.packages", "tebex:packages")]
@@ -528,11 +618,8 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
-            _adapter.GetPackages(packages =>
-            {
-                PrintPackages(player, packages);
-            });
+
+            _adapter.GetPackages(packages => { PrintPackages(player, packages); });
         }
 
         [Command("tebex.lookup", "tebex:lookup")]
@@ -543,7 +630,7 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
             }
-            
+
             if (args.Length != 1)
             {
                 _adapter.ReplyPlayer(player, $"Usage: tebex.lookup <playerId/playerUsername>");
@@ -567,10 +654,7 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, $"Chargeback Rate: {response.ChargebackRate}%");
                 _adapter.ReplyPlayer(player, $"Bans Total: {response.BanCount}");
                 _adapter.ReplyPlayer(player, $"Payments: {response.Payments.Count}");
-            }, error =>
-            {
-                _adapter.ReplyPlayer(player, error.ErrorMessage);
-            });
+            }, error => { _adapter.ReplyPlayer(player, error.ErrorMessage); });
         }
 
         [Command("tebex.sendlink", "tebex:sendlink")]
@@ -581,7 +665,7 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(commandRunner, "You must be an administrator to run this command.");
                 return;
             }
-            
+
             if (args.Length != 2)
             {
                 _adapter.ReplyPlayer(commandRunner, "Usage: tebex.sendlink <username> <packageId>");
@@ -596,7 +680,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            _adapter.ReplyPlayer(commandRunner, $"Creating checkout URL with package '{package.Name}'|{package.Id} for player {username}");
+            _adapter.ReplyPlayer(commandRunner,
+                $"Creating checkout URL with package '{package.Name}'|{package.Id} for player {username}");
             var player = players.FindPlayer(username);
             if (player == null)
             {
@@ -608,10 +693,266 @@ namespace Oxide.Plugins
             {
                 player.Command("chat.add", 0, player.Id, "Please visit the following URL to complete your purchase:");
                 player.Command("chat.add", 0, player.Id, $"{checkoutUrl.Url}");
-            }, error =>
-            {
-                _adapter.ReplyPlayer(player, $"{error.ErrorMessage}");
-            });
+            }, error => { _adapter.ReplyPlayer(player, $"{error.ErrorMessage}"); });
         }
-	}
+
+        #region Gui
+        
+        /*
+        private void OnServerInitialized()
+        {
+            ImageLibrary?.Call<bool>("AddImage", buyUIDefaultPackageImageUrl, buyUIDefaultPackageImageUrl, 0uL);
+        }
+
+        private void Unload()
+        {
+            if (!Interface.Oxide.IsShuttingDown)
+                RustUIManager.ClearUIs();
+        }
+
+        //#if RUST
+        [Command("TD_Open")]
+        private void TebexUI_Open(IPlayer player, string command, string[] args)
+        {
+            if (args.Length != 1)
+                return;
+
+            RustUIManager.OpenUI(player.Object as BasePlayer, args[0]);
+        }
+        //#endif
+
+        private class RustUIManager
+        {
+            private static Dictionary<string, Oxide.Game.Rust.Cui.CuiElementContainer> availableUIs = new Dictionary<string, Oxide.Game.Rust.Cui.CuiElementContainer>();
+            private static Dictionary<ulong, string> openUIs = new Dictionary<ulong, string>();
+
+            public static void ClearUIs()
+            {
+                foreach (BasePlayer player in BasePlayer.activePlayerList)
+                    CloseUI(player);
+
+                availableUIs.Clear();
+                openUIs.Clear();
+            }
+
+            public static void CloseUI(BasePlayer player)
+            {
+                string element;
+
+                if (openUIs.TryGetValue(player.userID, out element))
+                {
+                    Oxide.Game.Rust.Cui.CuiHelper.DestroyUi(player, element);
+                    openUIs.Remove(player.userID);
+                }
+            }
+
+            private class RustUIBuilder
+        {
+            public string Panel { get; }
+            private Oxide.Game.Rust.Cui.CuiElementContainer container;
+
+            public RustUIBuilder(string panel, string colour, string anchorMin, string anchorMax)
+            {
+                Panel = panel;
+                container = CreateElementContainer(panel, colour, anchorMin, anchorMax);
+            }
+
+            public RustUIBuilder AddPanel(string panel, string colour, string anchorMin, string anchorMax, bool cursor)
+            {
+                container.Add(new Oxide.Game.Rust.Cui.CuiPanel()
+                {
+                    Image = { Color = colour },
+                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                    CursorEnabled = cursor
+                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
+                return this;
+            }
+
+            public RustUIBuilder AddButton(string panel, string colour, string text, int size, string anchorMin, string anchorMax, string command, TextAnchor align)
+            {
+                container.Add(new Oxide.Game.Rust.Cui.CuiButton()
+                {
+                    Button = { Color = colour, Command = command },
+                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                    Text = { Text = text, FontSize = size, Align = align }
+                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
+                return this;
+            }
+
+            public RustUIBuilder AddImage(string panel, string url, string anchorMin, string anchorMax)
+            {
+                container.Add(new Oxide.Game.Rust.Cui.CuiElement()
+                {
+                    Name = Oxide.Game.Rust.Cui.CuiHelper.GetGuid(),
+                    Parent = panel,
+                    Components =
+                    {
+                        new Oxide.Game.Rust.Cui.CuiRawImageComponent() { Url = url },
+                        new Oxide.Game.Rust.Cui.CuiRectTransformComponent() { AnchorMin = anchorMin, AnchorMax = anchorMax }
+                    }
+                });
+                return this;
+            }
+
+            public RustUIBuilder AddLabel(string panel, string text, int size, string anchorMin, string anchorMax, TextAnchor align)
+            {
+                container.Add(new Oxide.Game.Rust.Cui.CuiLabel()
+                {
+                    Text = { FontSize = size, Align = align, Text = text },
+                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax }
+                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
+                return this;
+            }
+
+            public Oxide.Game.Rust.Cui.CuiElementContainer GetContainer() => container;
+
+            private Oxide.Game.Rust.Cui.CuiElementContainer CreateElementContainer(string panel, string colour, string anchorMin, string anchorMax)
+            {
+                return new Oxide.Game.Rust.Cui.CuiElementContainer()
+                {
+                    {
+                        new Oxide.Game.Rust.Cui.CuiPanel()
+                        {
+                            Image = { Color = colour },
+                            RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                            CursorEnabled = true
+                        },
+                        new Oxide.Game.Rust.Cui.CuiElement().Parent = "Overlay", panel
+                    }
+                };
+            }
+        }
+            public static void GenerateUIs(string storeName, string storeCurrency, string storeCurrencySymbol, SortedDictionary<int, Category> orderedCategories)
+            {
+                RustUIBuilder baseUIBuilder = GenerateBaseUI("TD_Listings", storeName, storeCurrency, null, "TD_Close");
+                double anchorMinX = 0.01;
+                double anchorMaxX = 0.10;
+                double anchorIncrement = 0.095;
+
+                foreach (KeyValuePair<int, Category> orderedCategory in orderedCategories)
+                {
+                    Category category = orderedCategory.Value;
+                    RustUIBuilder categoryUIBuilder = GenerateBaseUI($"TD_Listings_{category.Id}", storeName, storeCurrency, category.Name, $"TD_Open {baseUIBuilder.Panel}");
+                    double categoryAnchorMinX = 0.01;
+                    double categoryAnchorMaxX = 0.10;
+
+                    foreach (KeyValuePair<int, SubCategory> orderedSubCategory in category.SubCategories)
+                    {
+                        SubCategory subCategory = orderedSubCategory.Value;
+                        RustUIBuilder subCategoryUIBuilder = GenerateBaseUI($"TD_Listings_{subCategory.Id}", storeName, storeCurrency, $"{category.Name} -> {subCategory.Name}", $"TD_Open {categoryUIBuilder.Panel}");
+                        subCategoryUIBuilder = subCategoryUIBuilder.AddPanel(subCategoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "0.01 0.06", "0.99 0.86", true);
+                        subCategoryUIBuilder = AddPackages(subCategoryUIBuilder, storeCurrencySymbol, subCategory.Packages);
+
+                        categoryUIBuilder = categoryUIBuilder.AddButton(categoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), subCategory.Name, 14, $"{categoryAnchorMinX} 0.88", $"{categoryAnchorMaxX} 0.93", $"TD_Open TD_Listings_{subCategory.Id}", TextAnchor.MiddleCenter);
+                        categoryAnchorMinX += anchorIncrement; 
+                        categoryAnchorMaxX += anchorIncrement;
+
+                        availableUIs.Add(subCategoryUIBuilder.Panel, subCategoryUIBuilder.GetContainer());
+                    }
+
+                    if (category.Packages.Count > 0)
+                    {
+                        categoryUIBuilder = categoryUIBuilder.AddPanel(categoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "0.01 0.06", "0.99 0.86", true);
+                        categoryUIBuilder = AddPackages(categoryUIBuilder, storeCurrencySymbol, category.Packages);
+                    }
+                    else
+                        categoryUIBuilder = categoryUIBuilder.AddLabel(categoryUIBuilder.Panel, Instance.lang.GetMessage("BuyUISelectSubCategory", Instance), 18, "0.01 0.02", "0.99 0.86", TextAnchor.MiddleCenter);
+
+                    baseUIBuilder = baseUIBuilder.AddButton(baseUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), category.Name, 14, $"{anchorMinX} 0.88", $"{anchorMaxX} 0.93", $"TD_Open TD_Listings_{category.Id}", TextAnchor.MiddleCenter);
+                    anchorMinX += anchorIncrement;
+                    anchorMaxX += anchorIncrement;
+
+                    availableUIs.Add(categoryUIBuilder.Panel, categoryUIBuilder.GetContainer());
+                }
+
+                baseUIBuilder = baseUIBuilder.AddLabel(baseUIBuilder.Panel, Instance.lang.GetMessage("BuyUISelectCategory", Instance), 18, "0.01 0.02", "0.99 0.86", TextAnchor.MiddleCenter);
+                availableUIs.Add(baseUIBuilder.Panel, baseUIBuilder.GetContainer());
+            }
+
+            public static void OpenUI(BasePlayer player, string element)
+            {
+                Oxide.Game.Rust.Cui.CuiElementContainer container;
+
+                if (!availableUIs.TryGetValue(element, out container))
+                    return;
+
+                string openElement;
+
+                if (openUIs.TryGetValue(player.userID, out openElement))
+                    Oxide.Game.Rust.Cui.CuiHelper.DestroyUi(player, openElement);
+
+                openUIs[player.userID] = element;
+                Oxide.Game.Rust.Cui.CuiHelper.AddUi(player, container.ToJson());
+            }
+
+            private static RustUIBuilder AddPackages(RustUIBuilder builder, string storeCurrencySymbol, SortedDictionary<int, Package> orderedPackages)
+            {
+                int currentPackage = 0;
+                double packageAnchorMinX = 0.02;
+                double packageAnchorMinY = 0.67;
+                double packageAnchorMaxX = 0.13;
+                double packageAnchorMaxY = 0.85;
+                double packageAnchorXIncrement = 0.1215;
+                double packageAnchorYDecrement = 0.2;
+
+                foreach (KeyValuePair<int, Package> orderedPackage in orderedPackages)
+                {
+                    Package package = orderedPackage.Value;
+                    string imageIcon = "";
+
+                    if (package.Image)
+                        imageIcon = Instance.ImageLibrary?.Call<string>("GetImage", package.ImageUrl, 0uL);
+
+                    if (string.IsNullOrEmpty(imageIcon))
+                        imageIcon = Instance.ImageLibrary?.Call<string>("GetImage", Instance.buyUIDefaultPackageImageUrl, 0uL);
+
+                    builder = builder.AddPanel(builder.Panel, HexToRust(Instance.buyUIBackgroundColour, Instance.buyUIBackgroundColourTransparency), $"{packageAnchorMinX} {packageAnchorMinY}", $"{packageAnchorMaxX} {packageAnchorMaxY}", true)
+                        .AddLabel(builder.Panel, package.Name, 12, $"{packageAnchorMinX} {packageAnchorMaxY - 0.05}", $"{packageAnchorMaxX} {packageAnchorMaxY}", TextAnchor.MiddleCenter)
+                        .AddImage(builder.Panel, imageIcon, $"{packageAnchorMinX + 0.005} {packageAnchorMinY + 0.01}", $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) - 0.005} {packageAnchorMaxY - 0.055}")
+                        .AddLabel(builder.Panel, $"{storeCurrencySymbol}{package.Price}", 12, $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) + 0.005} {packageAnchorMaxY - (packageAnchorYDecrement / 2)}", $"{packageAnchorMaxX - 0.005} {packageAnchorMaxY - 0.055}", TextAnchor.MiddleCenter)
+                        .AddButton(builder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "Buy", 16, $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) + 0.005} {packageAnchorMinY + 0.01}", $"{packageAnchorMaxX - 0.005} {packageAnchorMaxY - (packageAnchorYDecrement / 2) - 0.01}", $"TD_Buy {package.Id}", TextAnchor.MiddleCenter);
+
+                    currentPackage++;
+
+                    if (currentPackage == 8)
+                    {
+                        currentPackage = 0;
+                        packageAnchorMinX = 0.02;
+                        packageAnchorMinY -= packageAnchorYDecrement;
+                        packageAnchorMaxX = 0.13;
+                        packageAnchorMaxY -= packageAnchorYDecrement;
+                    }
+                    else
+                    {
+                        packageAnchorMinX += packageAnchorXIncrement;
+                        packageAnchorMaxX += packageAnchorXIncrement;
+                    }
+                }
+
+                return builder;
+            }
+
+            private static RustUIBuilder GenerateBaseUI(string panelName, string storeName, string storeCurrency, string currentCategory, string closeCommand)
+            {
+                string header = $"{storeName}" + (currentCategory != null ? $" - {currentCategory}" : "");
+                return new RustUIBuilder(panelName, HexToRust(Instance.buyUIBackgroundColour, Instance.buyUIBackgroundColourTransparency), "0.02 0.2", "0.98 0.9")
+                    .AddLabel(panelName, header, 18, "0.01 0.94", "0.99 0.99", TextAnchor.MiddleCenter)
+                    .AddButton(panelName, HexToRust(Instance.buyUIButtonExitColour, Instance.buyUIButtonExitColourTransparency), "Go Back", 18, "0.93 0.94", "0.99 0.99", closeCommand, TextAnchor.MiddleCenter);
+            }
+
+            private static string HexToRust(string hex, float alpha = 1f)
+            {
+                if (hex.StartsWith("#"))
+                    hex = hex.TrimStart('#');
+
+                int red = int.Parse(hex.Substring(0, 2), NumberStyles.AllowHexSpecifier);
+                int green = int.Parse(hex.Substring(2, 2), NumberStyles.AllowHexSpecifier);
+                int blue = int.Parse(hex.Substring(4, 2), NumberStyles.AllowHexSpecifier);
+
+                return $"{(double)red / 255} {(double)green / 255} {(double)blue / 255} {alpha}";
+            }
+        }
+        */
+        #endregion
+    }
 }
