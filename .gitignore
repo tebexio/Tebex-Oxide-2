@@ -261,3 +261,4 @@ BuildConfig.py
 DeployTest.sh
 StartRust.bat
 StartRust.ps1
+*.pyc
