@@ -8,6 +8,7 @@ import threading
 import argparse
 import os
 import re
+import shutil
 
 # websocket to dev rust server
 ws = None
@@ -109,6 +110,8 @@ def merge_source_files():
 
 def test_remote_reload():
     print('Checking if the plugin compiles/reloads...')
+    shutil.copyfile(BuildConfig.output_file, BuildConfig.dev_rust_server_dir + "/oxide/plugins/Tebex.cs")
+    
     send_rcon_command("oxide.reload Tebex")
     time.sleep(2)
     if reload_successful:
