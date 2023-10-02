@@ -283,8 +283,8 @@ namespace Tebex.API
 
         public class CommandConditions
         {
-            [JsonProperty("delay")] public int Delay { get; }
-            [JsonProperty("slots")] public int Slots { get; }
+            [JsonProperty("delay")] public int Delay { get; set;  }
+            [JsonProperty("slots")] public int Slots { get; set; }
         }
 
         public class OfflineCommandsMeta
