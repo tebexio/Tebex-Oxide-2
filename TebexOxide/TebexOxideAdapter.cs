@@ -1,14 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using ConVar;
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
-using Oxide.Game.Rust.Libraries;
-using Oxide.Game.Rust.Libraries.Covalence;
 using Tebex.API;
-using Oxide.Plugins;
 using Tebex.Triage;
 
 namespace Tebex.Adapters

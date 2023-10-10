@@ -1,18 +1,9 @@
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
-using Oxide.Game.Rust.Libraries;
-using Oxide.Plugins;
-using System;
-using System.Linq;
-using System.Collections.Generic;
-using System.Globalization;
-using Oxide.Core;
-using Oxide.Game.Rust;
 using Tebex.Adapters;
 using Tebex.API;
 using Tebex.Triage;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
@@ -22,7 +13,7 @@ namespace Oxide.Plugins
     {
         private static TebexOxideAdapter _adapter;
 
-        private Dictionary<string, DateTime> lastNoteGiven = new Dictionary<string, DateTime>();
+        private Dictionary<string, DateTime> _lastNoteGiven = new Dictionary<string, DateTime>();
 
         public static string GetPluginVersion()
         {
@@ -57,7 +48,6 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.categories", this);
             permission.RegisterPermission("tebex.packages", this);
             permission.RegisterPermission("tebex.checkout", this);
-            permission.RegisterPermission("tebex.stats", this);
 
             // Check if auto reporting is disabled and show a warning if so.
             if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
@@ -170,7 +160,7 @@ namespace Oxide.Plugins
             }
 
             // Make sure we haven't spawned a note too recently for the user.
-            if (lastNoteGiven.TryGetValue(userID, out DateTime lastGivenTime) &&
+            if (_lastNoteGiven.TryGetValue(userID, out DateTime lastGivenTime) &&
                 (DateTime.Now - lastGivenTime).Seconds < BaseTebexAdapter.PluginConfig.NoteCooldown)
             {
                 return;
@@ -200,7 +190,7 @@ namespace Oxide.Plugins
                 item.MarkDirty();
                 player.GiveItem(item, BaseEntity.GiveItemReason.Generic);
 
-                lastNoteGiven[userID] = DateTime.Now;                
+                _lastNoteGiven[userID] = DateTime.Now;                
             }
             else
             {
@@ -428,8 +418,6 @@ namespace Oxide.Plugins
                 "tebex.packages <opt:categoryId>  - Shows all item packages available in the store or provided category.");
             _adapter.ReplyPlayer(player,
                 "tebex.checkout <packId>          - Creates a checkout link for an item. Visit to purchase.");
-            _adapter.ReplyPlayer(player,
-                "tebex.stats                      - Gets your stats from the store, purchases, subscriptions, etc.");
         }
 
         [Command("tebex.debug", "tebex:debug")]
@@ -695,264 +683,5 @@ namespace Oxide.Plugins
                 player.Command("chat.add", 0, player.Id, $"{checkoutUrl.Url}");
             }, error => { _adapter.ReplyPlayer(player, $"{error.ErrorMessage}"); });
         }
-
-        #region Gui
-        
-        /*
-        private void OnServerInitialized()
-        {
-            ImageLibrary?.Call<bool>("AddImage", buyUIDefaultPackageImageUrl, buyUIDefaultPackageImageUrl, 0uL);
-        }
-
-        private void Unload()
-        {
-            if (!Interface.Oxide.IsShuttingDown)
-                RustUIManager.ClearUIs();
-        }
-
-        //#if RUST
-        [Command("TD_Open")]
-        private void TebexUI_Open(IPlayer player, string command, string[] args)
-        {
-            if (args.Length != 1)
-                return;
-
-            RustUIManager.OpenUI(player.Object as BasePlayer, args[0]);
-        }
-        //#endif
-
-        private class RustUIManager
-        {
-            private static Dictionary<string, Oxide.Game.Rust.Cui.CuiElementContainer> availableUIs = new Dictionary<string, Oxide.Game.Rust.Cui.CuiElementContainer>();
-            private static Dictionary<ulong, string> openUIs = new Dictionary<ulong, string>();
-
-            public static void ClearUIs()
-            {
-                foreach (BasePlayer player in BasePlayer.activePlayerList)
-                    CloseUI(player);
-
-                availableUIs.Clear();
-                openUIs.Clear();
-            }
-
-            public static void CloseUI(BasePlayer player)
-            {
-                string element;
-
-                if (openUIs.TryGetValue(player.userID, out element))
-                {
-                    Oxide.Game.Rust.Cui.CuiHelper.DestroyUi(player, element);
-                    openUIs.Remove(player.userID);
-                }
-            }
-
-            private class RustUIBuilder
-        {
-            public string Panel { get; }
-            private Oxide.Game.Rust.Cui.CuiElementContainer container;
-
-            public RustUIBuilder(string panel, string colour, string anchorMin, string anchorMax)
-            {
-                Panel = panel;
-                container = CreateElementContainer(panel, colour, anchorMin, anchorMax);
-            }
-
-            public RustUIBuilder AddPanel(string panel, string colour, string anchorMin, string anchorMax, bool cursor)
-            {
-                container.Add(new Oxide.Game.Rust.Cui.CuiPanel()
-                {
-                    Image = { Color = colour },
-                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
-                    CursorEnabled = cursor
-                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
-                return this;
-            }
-
-            public RustUIBuilder AddButton(string panel, string colour, string text, int size, string anchorMin, string anchorMax, string command, TextAnchor align)
-            {
-                container.Add(new Oxide.Game.Rust.Cui.CuiButton()
-                {
-                    Button = { Color = colour, Command = command },
-                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
-                    Text = { Text = text, FontSize = size, Align = align }
-                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
-                return this;
-            }
-
-            public RustUIBuilder AddImage(string panel, string url, string anchorMin, string anchorMax)
-            {
-                container.Add(new Oxide.Game.Rust.Cui.CuiElement()
-                {
-                    Name = Oxide.Game.Rust.Cui.CuiHelper.GetGuid(),
-                    Parent = panel,
-                    Components =
-                    {
-                        new Oxide.Game.Rust.Cui.CuiRawImageComponent() { Url = url },
-                        new Oxide.Game.Rust.Cui.CuiRectTransformComponent() { AnchorMin = anchorMin, AnchorMax = anchorMax }
-                    }
-                });
-                return this;
-            }
-
-            public RustUIBuilder AddLabel(string panel, string text, int size, string anchorMin, string anchorMax, TextAnchor align)
-            {
-                container.Add(new Oxide.Game.Rust.Cui.CuiLabel()
-                {
-                    Text = { FontSize = size, Align = align, Text = text },
-                    RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax }
-                }, panel, Oxide.Game.Rust.Cui.CuiHelper.GetGuid());
-                return this;
-            }
-
-            public Oxide.Game.Rust.Cui.CuiElementContainer GetContainer() => container;
-
-            private Oxide.Game.Rust.Cui.CuiElementContainer CreateElementContainer(string panel, string colour, string anchorMin, string anchorMax)
-            {
-                return new Oxide.Game.Rust.Cui.CuiElementContainer()
-                {
-                    {
-                        new Oxide.Game.Rust.Cui.CuiPanel()
-                        {
-                            Image = { Color = colour },
-                            RectTransform = { AnchorMin = anchorMin, AnchorMax = anchorMax },
-                            CursorEnabled = true
-                        },
-                        new Oxide.Game.Rust.Cui.CuiElement().Parent = "Overlay", panel
-                    }
-                };
-            }
-        }
-            public static void GenerateUIs(string storeName, string storeCurrency, string storeCurrencySymbol, SortedDictionary<int, Category> orderedCategories)
-            {
-                RustUIBuilder baseUIBuilder = GenerateBaseUI("TD_Listings", storeName, storeCurrency, null, "TD_Close");
-                double anchorMinX = 0.01;
-                double anchorMaxX = 0.10;
-                double anchorIncrement = 0.095;
-
-                foreach (KeyValuePair<int, Category> orderedCategory in orderedCategories)
-                {
-                    Category category = orderedCategory.Value;
-                    RustUIBuilder categoryUIBuilder = GenerateBaseUI($"TD_Listings_{category.Id}", storeName, storeCurrency, category.Name, $"TD_Open {baseUIBuilder.Panel}");
-                    double categoryAnchorMinX = 0.01;
-                    double categoryAnchorMaxX = 0.10;
-
-                    foreach (KeyValuePair<int, SubCategory> orderedSubCategory in category.SubCategories)
-                    {
-                        SubCategory subCategory = orderedSubCategory.Value;
-                        RustUIBuilder subCategoryUIBuilder = GenerateBaseUI($"TD_Listings_{subCategory.Id}", storeName, storeCurrency, $"{category.Name} -> {subCategory.Name}", $"TD_Open {categoryUIBuilder.Panel}");
-                        subCategoryUIBuilder = subCategoryUIBuilder.AddPanel(subCategoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "0.01 0.06", "0.99 0.86", true);
-                        subCategoryUIBuilder = AddPackages(subCategoryUIBuilder, storeCurrencySymbol, subCategory.Packages);
-
-                        categoryUIBuilder = categoryUIBuilder.AddButton(categoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), subCategory.Name, 14, $"{categoryAnchorMinX} 0.88", $"{categoryAnchorMaxX} 0.93", $"TD_Open TD_Listings_{subCategory.Id}", TextAnchor.MiddleCenter);
-                        categoryAnchorMinX += anchorIncrement; 
-                        categoryAnchorMaxX += anchorIncrement;
-
-                        availableUIs.Add(subCategoryUIBuilder.Panel, subCategoryUIBuilder.GetContainer());
-                    }
-
-                    if (category.Packages.Count > 0)
-                    {
-                        categoryUIBuilder = categoryUIBuilder.AddPanel(categoryUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "0.01 0.06", "0.99 0.86", true);
-                        categoryUIBuilder = AddPackages(categoryUIBuilder, storeCurrencySymbol, category.Packages);
-                    }
-                    else
-                        categoryUIBuilder = categoryUIBuilder.AddLabel(categoryUIBuilder.Panel, Instance.lang.GetMessage("BuyUISelectSubCategory", Instance), 18, "0.01 0.02", "0.99 0.86", TextAnchor.MiddleCenter);
-
-                    baseUIBuilder = baseUIBuilder.AddButton(baseUIBuilder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), category.Name, 14, $"{anchorMinX} 0.88", $"{anchorMaxX} 0.93", $"TD_Open TD_Listings_{category.Id}", TextAnchor.MiddleCenter);
-                    anchorMinX += anchorIncrement;
-                    anchorMaxX += anchorIncrement;
-
-                    availableUIs.Add(categoryUIBuilder.Panel, categoryUIBuilder.GetContainer());
-                }
-
-                baseUIBuilder = baseUIBuilder.AddLabel(baseUIBuilder.Panel, Instance.lang.GetMessage("BuyUISelectCategory", Instance), 18, "0.01 0.02", "0.99 0.86", TextAnchor.MiddleCenter);
-                availableUIs.Add(baseUIBuilder.Panel, baseUIBuilder.GetContainer());
-            }
-
-            public static void OpenUI(BasePlayer player, string element)
-            {
-                Oxide.Game.Rust.Cui.CuiElementContainer container;
-
-                if (!availableUIs.TryGetValue(element, out container))
-                    return;
-
-                string openElement;
-
-                if (openUIs.TryGetValue(player.userID, out openElement))
-                    Oxide.Game.Rust.Cui.CuiHelper.DestroyUi(player, openElement);
-
-                openUIs[player.userID] = element;
-                Oxide.Game.Rust.Cui.CuiHelper.AddUi(player, container.ToJson());
-            }
-
-            private static RustUIBuilder AddPackages(RustUIBuilder builder, string storeCurrencySymbol, SortedDictionary<int, Package> orderedPackages)
-            {
-                int currentPackage = 0;
-                double packageAnchorMinX = 0.02;
-                double packageAnchorMinY = 0.67;
-                double packageAnchorMaxX = 0.13;
-                double packageAnchorMaxY = 0.85;
-                double packageAnchorXIncrement = 0.1215;
-                double packageAnchorYDecrement = 0.2;
-
-                foreach (KeyValuePair<int, Package> orderedPackage in orderedPackages)
-                {
-                    Package package = orderedPackage.Value;
-                    string imageIcon = "";
-
-                    if (package.Image)
-                        imageIcon = Instance.ImageLibrary?.Call<string>("GetImage", package.ImageUrl, 0uL);
-
-                    if (string.IsNullOrEmpty(imageIcon))
-                        imageIcon = Instance.ImageLibrary?.Call<string>("GetImage", Instance.buyUIDefaultPackageImageUrl, 0uL);
-
-                    builder = builder.AddPanel(builder.Panel, HexToRust(Instance.buyUIBackgroundColour, Instance.buyUIBackgroundColourTransparency), $"{packageAnchorMinX} {packageAnchorMinY}", $"{packageAnchorMaxX} {packageAnchorMaxY}", true)
-                        .AddLabel(builder.Panel, package.Name, 12, $"{packageAnchorMinX} {packageAnchorMaxY - 0.05}", $"{packageAnchorMaxX} {packageAnchorMaxY}", TextAnchor.MiddleCenter)
-                        .AddImage(builder.Panel, imageIcon, $"{packageAnchorMinX + 0.005} {packageAnchorMinY + 0.01}", $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) - 0.005} {packageAnchorMaxY - 0.055}")
-                        .AddLabel(builder.Panel, $"{storeCurrencySymbol}{package.Price}", 12, $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) + 0.005} {packageAnchorMaxY - (packageAnchorYDecrement / 2)}", $"{packageAnchorMaxX - 0.005} {packageAnchorMaxY - 0.055}", TextAnchor.MiddleCenter)
-                        .AddButton(builder.Panel, HexToRust(Instance.buyUIButtonColour, Instance.buyUIButtonColourTransparency), "Buy", 16, $"{packageAnchorMaxX - ((packageAnchorMaxX - packageAnchorMinX) / 2) + 0.005} {packageAnchorMinY + 0.01}", $"{packageAnchorMaxX - 0.005} {packageAnchorMaxY - (packageAnchorYDecrement / 2) - 0.01}", $"TD_Buy {package.Id}", TextAnchor.MiddleCenter);
-
-                    currentPackage++;
-
-                    if (currentPackage == 8)
-                    {
-                        currentPackage = 0;
-                        packageAnchorMinX = 0.02;
-                        packageAnchorMinY -= packageAnchorYDecrement;
-                        packageAnchorMaxX = 0.13;
-                        packageAnchorMaxY -= packageAnchorYDecrement;
-                    }
-                    else
-                    {
-                        packageAnchorMinX += packageAnchorXIncrement;
-                        packageAnchorMaxX += packageAnchorXIncrement;
-                    }
-                }
-
-                return builder;
-            }
-
-            private static RustUIBuilder GenerateBaseUI(string panelName, string storeName, string storeCurrency, string currentCategory, string closeCommand)
-            {
-                string header = $"{storeName}" + (currentCategory != null ? $" - {currentCategory}" : "");
-                return new RustUIBuilder(panelName, HexToRust(Instance.buyUIBackgroundColour, Instance.buyUIBackgroundColourTransparency), "0.02 0.2", "0.98 0.9")
-                    .AddLabel(panelName, header, 18, "0.01 0.94", "0.99 0.99", TextAnchor.MiddleCenter)
-                    .AddButton(panelName, HexToRust(Instance.buyUIButtonExitColour, Instance.buyUIButtonExitColourTransparency), "Go Back", 18, "0.93 0.94", "0.99 0.99", closeCommand, TextAnchor.MiddleCenter);
-            }
-
-            private static string HexToRust(string hex, float alpha = 1f)
-            {
-                if (hex.StartsWith("#"))
-                    hex = hex.TrimStart('#');
-
-                int red = int.Parse(hex.Substring(0, 2), NumberStyles.AllowHexSpecifier);
-                int green = int.Parse(hex.Substring(2, 2), NumberStyles.AllowHexSpecifier);
-                int blue = int.Parse(hex.Substring(4, 2), NumberStyles.AllowHexSpecifier);
-
-                return $"{(double)red / 255} {(double)green / 255} {(double)blue / 255} {alpha}";
-            }
-        }
-        */
-        #endregion
     }
 }

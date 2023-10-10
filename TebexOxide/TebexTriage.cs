@@ -1,5 +1,4 @@
 ﻿using Newtonsoft.Json;
-using Tebex.Adapters;
 
 namespace Tebex.Triage
 {

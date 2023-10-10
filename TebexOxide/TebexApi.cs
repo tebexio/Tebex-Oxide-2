@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.Tracing;
 using Newtonsoft.Json;
 using Tebex.Adapters;
 
@@ -727,6 +724,30 @@ namespace Tebex.API
 
         #region Customer Purchases
 
+        public class PackagePurchaseInfo
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("name")]
+            public string Name { get; set; }
+        }
+
+        public class CustomerPackagePurchaseRecord
+        {
+            [JsonProperty("txn_id")]
+            public string TransactionId { get; set; }
+
+            [JsonProperty("date")]
+            public DateTime Date { get; set; }
+
+            [JsonProperty("quantity")]
+            public int Quantity { get; set; }
+
+            [JsonProperty("package")]
+            public PackagePurchaseInfo Package { get; set; }
+        }
+        
         // Return a list of all active (non-expired) packages that a customer has purchased.
         // If packageId is provided, filter down to a single package ID, if you want to check if a specific package has been purchased. 
         public void GetActivePackagesForCustomer(string userId, int? packageId = null,
