@@ -710,6 +710,10 @@ namespace Tebex.API
 
             [JsonProperty("meta")] public OnlineCommandPlayerMeta Meta { get; set; }
 
+            /** Only populated by offline commands */
+            [JsonProperty("uuid")]
+            public string Uuid { get; set; } = "";
+            
             [JsonProperty("plugin_username_id")] public int PluginUsernameId { get; set; }
         }
 
