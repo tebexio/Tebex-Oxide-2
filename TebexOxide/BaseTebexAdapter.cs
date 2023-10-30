@@ -501,6 +501,8 @@ namespace Tebex.Adapters
                             
                             LogInfo($"Executing offline command: `{parsedCommand}`");
                             ExecuteOfflineCommand(command, null, commandName, args.ToArray());
+                            ExecutedCommands.Add(command);
+                            LogDebug($"Executed commands queue has {ExecutedCommands.Count} commands");
                         }
                     }, (error) =>
                     {
