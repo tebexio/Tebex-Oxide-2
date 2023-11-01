@@ -21,7 +21,6 @@ namespace Tebex.API
         public void InitAdapter(BaseTebexAdapter adapter)
         {
             Adapter = adapter;
-            adapter.LogInfo($"Setting up Tebex adapter {adapter.GetType().FullName}");
             adapter.Init();
         }
         

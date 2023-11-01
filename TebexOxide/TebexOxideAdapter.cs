@@ -113,9 +113,9 @@ namespace Tebex.Adapters
                 {
                     if (url.Contains(TebexApi.TebexApiBase))
                     {
-                        LogInfo("Your server's secret key is either not set or incorrect.");
-                        LogInfo("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
-                        LogInfo("Set up your store and get your secret key at https://tebex.io/");
+                        LogError("Your server's secret key is either not set or incorrect.");
+                        LogError("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
+                        LogError("Set up your store and get your secret key at https://tebex.io/");
                     }
                 }
                 else if (code == 429) // Rate limited
@@ -291,8 +291,7 @@ namespace Tebex.Adapters
                     // Some commands have slot requirements, don't execute those if the player can't accept it
                     if (slotsAvailable < command.Conditions.Slots)
                     {
-                        LogInfo(
-                            $"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
+                        LogWarning($"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
                         return false;
                     }
                 }

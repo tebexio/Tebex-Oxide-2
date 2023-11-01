@@ -56,7 +56,7 @@ namespace Tebex.Adapters
             _nextCheckDeleteCommands = DateTime.Now.AddSeconds(60);
             TebexApi.Instance.DeleteCommands(ids.ToArray(), (code, body) =>
             {
-                LogInfo("Successfully flushed completed commands.");
+                LogDebug("Successfully flushed completed commands.");
                 ExecutedCommands.Clear();
             }, (error) =>
             {
@@ -475,7 +475,7 @@ namespace Tebex.Adapters
                 // Process offline commands immediately
                 if (response.Meta != null && response.Meta.ExecuteOffline)
                 {
-                    LogInfo("Requesting offline commands from API...");
+                    LogDebug("Requesting offline commands from API...");
                     TebexApi.Instance.GetOfflineCommands((code, offlineCommandsBody) =>
                     {
                         var offlineCommands = JsonConvert.DeserializeObject<TebexApi.OfflineCommandsResponse>(offlineCommandsBody);
@@ -491,7 +491,7 @@ namespace Tebex.Adapters
                             return;
                         }
 
-                        LogInfo($"Found {offlineCommands.Commands.Count} offline commands to execute.");
+                        LogDebug($"Found {offlineCommands.Commands.Count} offline commands to execute.");
                         foreach (TebexApi.Command command in offlineCommands.Commands)
                         {
                             var parsedCommand = ExpandOfflineVariables(command.CommandToRun, command.Player);
@@ -499,7 +499,7 @@ namespace Tebex.Adapters
                             var commandName = splitCommand[0];
                             var args = splitCommand.Skip(1);
                             
-                            LogInfo($"Executing offline command: `{parsedCommand}`");
+                            LogDebug($"Executing offline command: `{parsedCommand}`");
                             ExecuteOfflineCommand(command, null, commandName, args.ToArray());
                             ExecutedCommands.Add(command);
                             LogDebug($"Executed commands queue has {ExecutedCommands.Count} commands");
@@ -529,13 +529,13 @@ namespace Tebex.Adapters
                 }
 
                 // Process any online commands 
-                LogInfo($"Found {response.Players.Count} due players in the queue");
+                LogDebug($"Found {response.Players.Count} due players in the queue");
                 foreach (var duePlayer in response.Players)
                 {
-                    LogInfo($"Processing online commands for player {duePlayer.Name}...");
+                    LogDebug($"Processing online commands for player {duePlayer.Name}...");
                     if (!IsPlayerOnline(duePlayer.UUID))
                     {
-                        LogInfo($"Player {duePlayer.Name} has online commands but is not connected. Skipping.");
+                        LogDebug($"Player {duePlayer.Name} has online commands but is not connected. Skipping.");
                         continue;
                     }
                     
@@ -559,7 +559,7 @@ namespace Tebex.Adapters
                                 return;
                             }
 
-                            LogInfo($"> Processing {onlineCommands.Commands.Count} commands for this player...");
+                            LogDebug($"> Processing {onlineCommands.Commands.Count} commands for this player...");
                             foreach (var command in onlineCommands.Commands)
                             {
                                 object playerRef = GetPlayerRef(onlineCommands.Player.Id);

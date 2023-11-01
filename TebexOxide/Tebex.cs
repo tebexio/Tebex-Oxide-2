@@ -52,8 +52,8 @@ namespace Oxide.Plugins
             // Check if auto reporting is disabled and show a warning if so.
             if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
             {
-                _adapter.LogInfo("Auto reporting issues to Tebex is disabled.");
-                _adapter.LogInfo("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
+                _adapter.LogWarning("Auto reporting issues to Tebex is disabled.");
+                _adapter.LogWarning("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
             }
 
             // Check if secret key has been set. If so, get store information and place in cache
