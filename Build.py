@@ -106,7 +106,7 @@ def merge_source_files():
                 file.write(output[sourceFile])
         
         # Closing braces
-        file.write("\t}\n}\n")
+        file.write("\t}\n")
 
 def test_remote_reload():
     print('Checking if the plugin compiles/reloads...')
