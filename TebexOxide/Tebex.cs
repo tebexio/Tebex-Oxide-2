@@ -7,7 +7,7 @@ using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.1")]
+    [Info("Tebex", "Tebex", "2.0.2")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
@@ -17,7 +17,7 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.1";
+            return "2.0.2";
         }
 
         private void Init()
@@ -52,8 +52,8 @@ namespace Oxide.Plugins
             // Check if auto reporting is disabled and show a warning if so.
             if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
             {
-                _adapter.LogInfo("Auto reporting issues to Tebex is disabled.");
-                _adapter.LogInfo("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
+                _adapter.LogWarning("Auto reporting issues to Tebex is disabled.");
+                _adapter.LogWarning("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
             }
 
             // Check if secret key has been set. If so, get store information and place in cache
