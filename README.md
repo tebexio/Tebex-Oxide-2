@@ -1,9 +1,11 @@
-# Tebex Oxide Plugin for Rust
+# Tebex Oxide Plugin for Rust and 7 Days To Die
 
 ## Description
 [Tebex](https://tebex.io/) provides a monetization and donation platform for game servers, allowing server owners to manage in-game purchases, subscriptions, and donations with ease.
 
-This plugin acts as a bridge between your Rust game server and the Tebex platform, enabling you to offer a wide range of virtual items, packages, and services to your players.
+This plugin acts as a bridge between your **Rust** game server and the **Tebex platform**, enabling you to offer a wide range of virtual items, packages, and services to your players.
+
+As this is an Oxide plugin, it is also compatible with **7 Days to Die**.
 
 ## Commands
 The following commands are available through the Tebex Rust Plugin:
@@ -28,9 +30,9 @@ The following commands are available through the Tebex Rust Plugin:
 ## Installation
 To install the Tebex Rust Plugin, follow these steps:
 
-1. Download the latest release of this plugin from [Tebex.io](https://docs.tebex.io/plugin/official-plugins).
-2. Upload the plugin .cs source file to the `rust_dedicated/oxide/plugins` directory of your Rust game server.
-3. Run `oxide.reload TebexDonate` to load the plugin.
+1. Download the latest release of this plugin from [Tebex.io](https://docs.tebex.io/plugin/official-plugins), or choose the latest [Release](https://github.com/tebexio/Tebex-Rust/releases) from this repository.
+2. Upload the plugin .cs source file to the `oxide/plugins` directory of your game server.
+3. Start the game server. If it is already running, it should automatically load the plugin. If not, run `oxide.reload Tebex` to load the plugin.
 
 ## Dev Environment Setup
 If you wish to contribute to the development of the plugin, you can set up your development environment as follows:
@@ -38,22 +40,22 @@ If you wish to contribute to the development of the plugin, you can set up your 
 **Requirements:**
 - Python 3
 - dotnet
-- [Oxide for Rust](https://umod.org/games/rust)
+- [Oxide](https://umod.org/games/rust)
 
 **Setup Instructions:**
 1. Clone the repository to an empty folder.
-2. Download [Oxide for Rust](https://umod.org/games/rust) and unzip it.
+2. Download [Oxide](https://umod.org/games/rust) and unzip it.
 3. Add the assemblies `Oxide.Core`, `Oxide.CSharp`, `Oxide.MySql`, `Oxide.Rust`, and `Facebunch.UnityEngine`, `Assembly-CSharp` as a minimum to the project.
 
 ## Building and Testing
 Oxide plugins are basic .cs source files - we do not build a .dll or an executable. Instead, we combine our source files
-together then ensure it can compile and run on a real Rust server. You can configure a test server in `BuildConfig.py`
+together then ensure it can compile and run on a real server. You can configure a test server in `BuildConfig.py`
 
 1. Ensure your development environment is properly set up per the instructions above.
 2. Using `BuildConfig.py.example`, make a `BuildConfig.py` and fill the appropriate values.
 3. Run `python3 Build.py`.
 
-This will merge any source files configured in `BuildConfig.py` together into the final plugin in `Build/TebexDonate.cs`
+This will merge any source files configured in `BuildConfig.py` together into the final plugin in `Build/Tebex.cs`
 
 ### Build Arguments
 The full build and test suite can be ran sequentially with these additional arguments:
@@ -70,4 +72,4 @@ We welcome contributions from the community. Please refer to the `CONTRIBUTING.m
 ## Support
 This repository is only used for bug reports via GitHub Issues. If you have found a bug, please [open an issue](https://github.com/tebexio/Tebex-Rust/issues).
 
-If you are a user requiring support for Tebex, please contact us at https://www.tebex.io/contact
+If you are a user requiring support for Tebex, please contact us at https://tebex.io/contact
