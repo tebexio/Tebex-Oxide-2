@@ -691,6 +691,18 @@ namespace Tebex.Adapters
             {
                 return;
             }
+
+            // Make sure we don't try to report triage events about ourselves if the triage API has failed.
+            string requestUrl = "";
+            var requestIncluded = autoTriageEvent.Metadata.TryGetValue("request", out requestUrl);
+            if (requestUrl == null)
+            {
+                requestUrl = "";
+            }
+            if (requestIncluded && requestUrl.Contains(TebexApi.TebexTriageUrl))
+            {
+                return;
+            }
             
             // Determine store name
             // Determine the store info, if we have it.
