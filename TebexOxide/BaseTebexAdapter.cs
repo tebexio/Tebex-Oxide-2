@@ -640,7 +640,7 @@ namespace Tebex.Adapters
             //TODO
         }
 
-        public void BanPlayer(string playerName, string playerIp, String reason, TebexApi.ApiSuccessCallback onSuccess,
+        public void BanPlayer(string playerName, string playerIp, string reason, TebexApi.ApiSuccessCallback onSuccess,
             TebexApi.ApiErrorCallback onError)
         {
             TebexApi.Instance.CreateBan(reason, playerIp, playerName, onSuccess, onError);

@@ -19,7 +19,7 @@ min_hook_time = 1000
 max_hook_time = 0
 
 def main():
-    parser = argparse.ArgumentParser(description='Manage build operations for Rust.')
+    parser = argparse.ArgumentParser(description='Manage build operations for the Tebex Oxide plugin (Rust/7 Days).')
     
     parser.add_argument('--TestRemoteReload', action='store_true', help='Connect to the dev Rust server and check if the plugin compiles/reloads.')
     parser.add_argument('--DeployTest', action='store_true', help='Runs a deployment script.')
@@ -38,7 +38,7 @@ def main():
         
     if args.TestRemoteReload or args.OpenDevConsole or args.WatchHookTimes:
         threading.Thread(target=connect_websocket_and_read,
-            args=(f"ws://{BuildConfig.dev_rust_server_ip}:{BuildConfig.dev_rust_server_rcon_port}/{BuildConfig.dev_rust_server_rcon_password}",), daemon=True).start()
+            args=(f"ws://{BuildConfig.dev_server_ip}:{BuildConfig.dev_server_rcon_port}/{BuildConfig.dev_server_rcon_password}",), daemon=True).start()
 
         time.sleep(1)
         if args.TestRemoteReload:
@@ -93,7 +93,7 @@ def merge_source_files():
                             output[file_name] = line
 
     with open(BuildConfig.output_file, 'w') as file:
-        file.write(BuildConfig.rust_plugin_header + "\n")
+        file.write(BuildConfig.plugin_header + "\n")
         file.write("namespace Oxide.Plugins\n")
         file.write("{\n")
         
@@ -110,7 +110,7 @@ def merge_source_files():
 
 def test_remote_reload():
     print('Checking if the plugin compiles/reloads...')
-    shutil.copyfile(BuildConfig.output_file, BuildConfig.dev_rust_server_dir + "/oxide/plugins/Tebex.cs")
+    shutil.copyfile(BuildConfig.output_file, BuildConfig.dev_server_dir + "/oxide/plugins/Tebex.cs")
     
     send_rcon_command("oxide.reload Tebex")
     time.sleep(2)

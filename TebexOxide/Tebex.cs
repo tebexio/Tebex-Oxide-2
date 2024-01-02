@@ -7,7 +7,7 @@ using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.2")]
+    [Info("Tebex", "Tebex", "2.0.3")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
@@ -17,7 +17,7 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.2";
+            return "2.0.3";
         }
 
         private void Init()
@@ -124,6 +124,7 @@ namespace Oxide.Plugins
             _adapter.OnUserConnected(player.Id, player.Address);
         }
 
+        #if RUST // VIP notes are enabled on Rust only
         void OnLootEntity(BasePlayer player, BaseEntity entity)
         {
             if (!BaseTebexAdapter.PluginConfig.VipNotesEnabled)
@@ -197,7 +198,8 @@ namespace Oxide.Plugins
                 _adapter.LogDebug("Store information not present in cache when trying to spawn VIP note!");
             }
         }
-
+        #endif
+        
         private void OnServerShutdown()
         {
             // Make sure join queue is always empties on shutdown

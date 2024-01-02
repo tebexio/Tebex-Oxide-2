@@ -281,6 +281,7 @@ namespace Tebex.Adapters
             {
                 if (command.Conditions.Slots > 0)
                 {
+                    #if RUST
                     // Cast down to the base player in order to get inventory slots available.
                     var player = playerObj as Oxide.Game.Rust.Libraries.Covalence.RustPlayer;
                     BasePlayer basePlayer = player.Object as BasePlayer;
@@ -294,6 +295,9 @@ namespace Tebex.Adapters
                         LogWarning($"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
                         return false;
                     }
+                    #else
+                    LogWarning($"> Command has slots condition, but slots are not supported in this game.");
+                    #endif
                 }
                 
                 if (command.Conditions.Delay > 0)
