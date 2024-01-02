@@ -60,11 +60,11 @@ namespace Tebex.Adapters
                 ExecutedCommands.Clear();
             }, (error) =>
             {
-                LogError($"Failed to flush completed commands: {error.ErrorMessage}");
+                LogDebug($"Failed to flush completed commands: {error.ErrorMessage}");
             }, (code, body) =>
             {
-                LogError($"Unexpected error while flushing completed commands. API response code {code}. Response body follows:");
-                LogError(body);
+                LogDebug($"Unexpected error while flushing completed commands. API response code {code}. Response body follows:");
+                LogDebug(body);
             });
         }
 
@@ -94,7 +94,7 @@ namespace Tebex.Adapters
             _eventQueue.Add(joinEvent);
 
             // If we're already over a threshold, go ahead and send the events.
-            if (_eventQueue.Count > 10) //TODO make configurable?
+            if (_eventQueue.Count > 10)
             {
                 ProcessJoinQueue();
             }
@@ -215,7 +215,8 @@ namespace Tebex.Adapters
                     var storeInfo = JsonConvert.DeserializeObject<TebexApi.TebexStoreInfo>(body);
                     if (storeInfo == null)
                     {
-                        LogError("Failed to parse fetched store information.");
+                        ReportAutoTriageEvent(new TebexTriage.AutoTriageEvent());
+                        LogError("Failed to parse fetched store information: ");
                         LogError(body);
                         return;
                     }
@@ -263,7 +264,7 @@ namespace Tebex.Adapters
                 var response = JsonConvert.DeserializeObject<TebexApi.ListingsResponse>(body);
                 if (response == null)
                 {
-                    LogError("Could not get refresh all listings! Response body from API follows:");
+                    LogError("Could not get refresh all listings!:");
                     LogError(body);
                     return;
                 }
@@ -282,7 +283,7 @@ namespace Tebex.Adapters
                 var response = JsonConvert.DeserializeObject<List<TebexApi.Package>>(body);
                 if (response == null)
                 {
-                    LogError("Could not get refresh package listings! Response body from API follows:");
+                    LogError("Could not get refresh package listings!");
                     LogError(body);
                     return;
                 }
@@ -356,7 +357,7 @@ namespace Tebex.Adapters
                     });
                 }
             }
-            catch (Exception e) //FIXME reports of very infuriating NPE in this func
+            catch (Exception e)
             {
                 ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Raised exception while refreshing packages", new Dictionary<string, string>
                 {
@@ -364,7 +365,7 @@ namespace Tebex.Adapters
                     {"error", e.Message},
                     {"trace", e.StackTrace}
                 }));
-                LogError("An error occurred while getting your store's packages. This has been reported automatically.");
+                LogError("An error occurred while getting your store's packages.");
             }
         }
 
@@ -535,7 +536,7 @@ namespace Tebex.Adapters
                     LogDebug($"Processing online commands for player {duePlayer.Name}...");
                     if (!IsPlayerOnline(duePlayer.UUID))
                     {
-                        LogDebug($"Player {duePlayer.Name} has online commands but is not connected. Skipping.");
+                        LogDebug($"> Player {duePlayer.Name} has online commands but is not connected. Skipping.");
                         continue;
                     }
                     

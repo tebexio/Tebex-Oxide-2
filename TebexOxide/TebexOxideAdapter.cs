@@ -80,8 +80,8 @@ namespace Tebex.Adapters
             Enum.TryParse<RequestMethod>(verb.ToString(), true, out method);
             if (method == null)
             {
-                LogError($"Unknown HTTP method!: {verb.ToString()}");
-                LogError($"Failed to interpret HTTP method on request {verb} {endpoint}| {body}");
+                LogDebug($"Unknown HTTP method!: {verb.ToString()} {endpoint} | {body}");
+                return;
             }
 
             var headers = new Dictionary<string, string>
@@ -193,6 +193,12 @@ namespace Tebex.Adapters
                     LogDebug(response);
                     onServerError?.Invoke(code, response);
                 }
+                else if (code == 530) // Cloudflare origin error
+                {
+                    LogDebug("CDN reported error code, web request not completed: " + code);
+                    LogDebug(response);
+                    onServerError?.Invoke(code, response);
+                }
                 else if (code == 0)
                 {
                     ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Request timeout to Plugin API",
@@ -201,7 +207,7 @@ namespace Tebex.Adapters
                             { "request", logOutStr },
                             { "response", logInStr },
                         }));
-                    LogError("Request Timeout from Tebex API. Please try again later.");
+                    LogDebug("Request Timeout from Tebex API. Please try again later.");
                 }
                 else // This should be a general failure error message with a JSON-formatted response from the API.
                 {
@@ -226,7 +232,7 @@ namespace Tebex.Adapters
                                     { "request", logOutStr },
                                     { "response", logInStr },
                                 }));
-                            LogError($"Failed to unmarshal an expected error response from API.");
+                            LogDebug($"Failed to unmarshal an expected error response from API.");
                             onServerError?.Invoke(code, response);
                         }
 
@@ -316,13 +322,16 @@ namespace Tebex.Adapters
         
         public override bool IsPlayerOnline(string playerRefId)
         {
+            // Get a reference to the in-game player instance
             IPlayer iPlayer = GetPlayerRef(playerRefId) as IPlayer;
-            if (iPlayer == null) //Ensure the lookup worked
+            if (iPlayer == null) // Player is not connected
             {
-                LogError($"Attempted to look up online player, but no reference found: {playerRefId}");
                 return false;
             }
 
+            // IsConnected might indicate just a connection to the server, but unknown if it's possible to have an IPlayer
+            // reference and for the player to not actually be connected. This would create a case where we can't
+            // check inventory slots prior to package delivery.
             return iPlayer.IsConnected;
         }
 
@@ -411,6 +420,11 @@ namespace Tebex.Adapters
             if (iPlayer == null)
             {
                 LogError($"Could not cast player instance when expanding username variables: {playerObj}");
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Could not cast player instance when expanding username variables", new Dictionary<string, string>
+                {
+                    {"input", input},
+                    {"playerObj", playerObj?.ToString()},
+                }));
                 return input;
             }
 
@@ -419,6 +433,12 @@ namespace Tebex.Adapters
                 LogError($"Player ID or name is null while expanding username?!: {iPlayer}");
                 LogError($"Base player object: {playerObj}");
                 LogError($"Input command: {input}");
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Player ID or name is null while expanding username?!: ", new Dictionary<string, string>
+                {
+                    {"input", input},
+                    {"iPlayer.Id", iPlayer.Id},
+                    {"iPlayer.Name", iPlayer.Name}
+                }));
                 return input;
             }
 
