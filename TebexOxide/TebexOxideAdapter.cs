@@ -92,8 +92,13 @@ namespace Tebex.Adapters
 
             var url = endpoint;
             var logOutStr = $"-> {method.ToString()} {url} | {body}";
-            LogDebug(logOutStr);
-
+            
+            LogDebug(logOutStr); // Write the full output entry to a debug log
+            if (logOutStr.Length > 256) // Limit any sent size of an output string to 256 characters, to prevent sending too much data
+            {
+                logOutStr = logOutStr.Substring(0, 251) + "[...]";
+            }
+            
             if (IsRateLimited)
             {
                 LogDebug("Skipping web request as rate limiting is enabled.");
@@ -102,9 +107,55 @@ namespace Tebex.Adapters
             
             Plugin.WebRequests().Enqueue(url, body, (code, response) =>
             {
-                var logInStr = $"{code} | '{response}' <- {method.ToString()} {url}";
+                var truncatedResponse = response;
+                if (truncatedResponse.Length > 256) // As above limit any data logged or sent to 256 characters
+                {
+                    truncatedResponse = truncatedResponse.Substring(0, 251) + "[...]";
+                }
+                
+                var logInStr = $"{code} | '{truncatedResponse}' <- {method.ToString()} {url}";
                 LogDebug(logInStr);
-
+                
+                // To prevent issues where triage events try to be reported due to server issues on the triage API itself,
+                //   handle any triage response callbacks here
+                if (url.Contains(TebexApi.TebexTriageUrl))
+                {
+                    try
+                    {
+                        switch (code)
+                        {
+                            case 200:
+                            case 201:
+                            case 202:
+                            case 204:
+                                onSuccess?.Invoke(code, response);
+                                return;
+                            case 400:
+                                onServerError?.Invoke(code, response);
+                                return;
+                            case 500:
+                                onServerError?.Invoke(code, response);
+                                return;
+                            default:
+                                LogDebug($"Unexpected response code from plugin logs API: {code}");
+                                return;
+                        }                        
+                    }
+                    catch (Exception e)
+                    {
+                        LogDebug($"Failed to handle automatic error log request: {e.Message}");
+                        LogDebug(e.ToString());
+                        return;
+                    }
+                }
+                
+                // We should never have an HTML response passed to callback functions which might assume is JSON
+                if (body.Contains("DOCTYPE html") || body.StartsWith("<html"))
+                {
+                    LogDebug("> Unexpected html response from web request!");
+                    return;
+                }
+                
                 if (code == 200 || code == 201 || code == 202 || code == 204)
                 {
                     onSuccess?.Invoke(code, response);
@@ -120,11 +171,6 @@ namespace Tebex.Adapters
                 }
                 else if (code == 429) // Rate limited
                 {
-                    if (url.Contains(TebexApi.TebexTriageUrl)) // Rate limits sent by log server are ignored
-                    {
-                        return;
-                    }
-                    
                     // Rate limits sent from Tebex enforce a 5 minute cooldown.
                     LogWarning("We are being rate limited by Tebex API. If this issue continues, please report a problem.");
                     LogWarning("Requests will resume after 5 minutes.");
@@ -142,9 +188,9 @@ namespace Tebex.Adapters
                             { "request", logOutStr },
                             { "response", logInStr },
                         }));
-                    LogError(
+                    LogDebug(
                         "Internal Server Error from Tebex API. Please try again later. Error details follow below.");
-                    LogError(response);
+                    LogDebug(response);
                     onServerError?.Invoke(code, response);
                 }
                 else if (code == 0)
@@ -168,7 +214,7 @@ namespace Tebex.Adapters
                                 "Plugin API reported general failure", new Dictionary<string, string>
                                 {
                                     { "request", logOutStr },
-                                    { "response", logInStr },
+                                    { "error", error.ErrorMessage },
                                 }));
                             onApiError?.Invoke(error);
                         }
@@ -190,15 +236,26 @@ namespace Tebex.Adapters
                     catch (Exception e) // Something really unexpected with our response and it's likely not JSON
                     {
                         ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
-                            "Did not handle error response from API", new Dictionary<string, string>
-                            {
-                                { "request", logOutStr },
-                                { "response", logInStr },
-                            }));
-                        LogError("Could not gracefully handle error response.");
-                        LogError($"Response from remote {response}");
-                        LogError(e.ToString());
-                        onServerError?.Invoke(code, $"{e.Message}: {response}");
+                        "Did not handle error response from API", new Dictionary<string, string>
+                        {
+                            { "request", logOutStr },
+                            { "response", logInStr },
+                        }));
+                        
+                        LogDebug("Could not gracefully handle error response.");
+                        LogDebug($"Response from remote {response}");
+                        LogDebug(e.ToString());
+
+                        // Try to allow server error callbacks to be processed, but they may assume the body contains
+                        // parseable json when it doesn't.
+                        try
+                        {
+                            onServerError?.Invoke(code, $"{e.Message}: {response}");    
+                        }
+                        catch (JsonReaderException jsonException)
+                        {
+                            LogDebug($"Could not parse response from remote as JSON. {jsonException.Message}: {response}");
+                        }
                     }
                 }
             }, Plugin, method, headers, 10.0f);
