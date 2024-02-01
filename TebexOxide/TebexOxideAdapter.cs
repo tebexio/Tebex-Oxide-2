@@ -428,12 +428,12 @@ namespace Tebex.Adapters
                 return input;
             }
 
-            if (string.IsNullOrEmpty(iPlayer.Id) || string.IsNullOrEmpty(iPlayer.Name))
+            if (input.Contains("{username}") && string.IsNullOrEmpty(iPlayer.Name))
             {
-                LogError($"Player ID or name is null while expanding username?!: {iPlayer}");
+                LogError($"Player name is null while expanding username?!: {iPlayer}");
                 LogError($"Base player object: {playerObj}");
                 LogError($"Input command: {input}");
-                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Player ID or name is null while expanding username?!: ", new Dictionary<string, string>
+                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Player ID is null while expanding username?!: ", new Dictionary<string, string>
                 {
                     {"input", input},
                     {"iPlayer.Id", iPlayer.Id},
