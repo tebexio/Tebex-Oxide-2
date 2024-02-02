@@ -297,7 +297,7 @@ namespace Tebex.API
             [JsonProperty("id")] public int Id { get; set; }
             [JsonProperty("command")] public string CommandToRun { get; set; } = "";
             [JsonProperty("payment")] public long Payment { get; set; }
-            [JsonProperty("package")] public long PackageRef { get; set; }
+            [JsonProperty(NullValueHandling=NullValueHandling.Ignore)] public long PackageRef { get; set; }
             [JsonProperty("conditions")] public CommandConditions Conditions { get; set; } = new CommandConditions();
             [JsonProperty("player")] public PlayerInfo Player { get; set; }
         }
