@@ -7,7 +7,7 @@ using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.6")]
+    [Info("Tebex", "Tebex", "2.0.7")]
     [Description("Official support for the Tebex server monetization platform")]
     public class Tebex : CovalencePlugin
     {
@@ -17,7 +17,7 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.6";
+            return "2.0.7";
         }
 
         private void Init()
