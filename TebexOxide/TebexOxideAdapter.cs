@@ -351,8 +351,7 @@ namespace Tebex.Adapters
                     // Cast down to the base player in order to get inventory slots available.
                     var player = playerObj as Oxide.Game.Rust.Libraries.Covalence.RustPlayer;
                     BasePlayer basePlayer = player.Object as BasePlayer;
-                    var slotsAvailable = basePlayer.inventory.containerMain.capacity - basePlayer.inventory.containerMain.TotalItemAmount();
-                    
+                    var slotsAvailable = basePlayer.inventory.containerMain.capacity - basePlayer.inventory.containerMain.itemList.Count;                    
                     LogDebug($"Detected {slotsAvailable} slots in main inventory where command wants {command.Conditions.Slots}");
                     
                     // Some commands have slot requirements, don't execute those if the player can't accept it
