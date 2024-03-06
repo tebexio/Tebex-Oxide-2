@@ -289,7 +289,7 @@ namespace Oxide.Plugins
 
         protected override void LoadDefaultConfig()
         {
-            Config.WriteObject(GetDefaultConfig(), true, ConVar.Server.rootFolder + "/oxide/config/Tebex.json");
+            Config.WriteObject(GetDefaultConfig(), true);
         }
 
         private BaseTebexAdapter.TebexConfig GetDefaultConfig()
