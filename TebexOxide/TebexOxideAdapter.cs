@@ -3,14 +3,15 @@ using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Tebex.API;
 using Tebex.Triage;
+using UnityEngine;
 
 namespace Tebex.Adapters
 {
     public class TebexOxideAdapter : BaseTebexAdapter
     {
-        public static Oxide.Plugins.Tebex Plugin { get; private set; }
+        public static Oxide.Plugins.TebexPlugin Plugin { get; private set; }
 
-        public TebexOxideAdapter(Oxide.Plugins.Tebex plugin)
+        public TebexOxideAdapter(Oxide.Plugins.TebexPlugin plugin)
         {
             Plugin = plugin;
         }
@@ -43,16 +44,47 @@ namespace Tebex.Adapters
             });
         }
 
-        public override void LogWarning(string message)
+        public override void LogWarning(string message, string solution)
         {
             Plugin.Warn(message);
+            Plugin.Warn("- " + solution);
+
+            if (PluginConfig.AutoReportingEnabled)
+            {
+                new PluginEvent(Plugin, Plugin.GetPlatform(Plugin.Server()), EnumEventLevel.WARNING, message).Send(this);
+            }
         }
 
+        public override void LogWarning(string message, string solution, Dictionary<String, String> metadata)
+        {
+            Plugin.Warn(message);
+            Plugin.Warn("- " + solution);
+
+            if (PluginConfig.AutoReportingEnabled)
+            {
+                new PluginEvent(Plugin, Plugin.GetPlatform(Plugin.Server()), EnumEventLevel.WARNING, message).WithMetadata(metadata).Send(this);
+            }
+        }
+        
         public override void LogError(string message)
         {
             Plugin.Error(message);
+            
+            if (PluginConfig.AutoReportingEnabled)
+            {
+                new PluginEvent(Plugin, Plugin.GetPlatform(Plugin.Server()), EnumEventLevel.ERROR, message).Send(this);
+            }
         }
 
+        public override void LogError(string message, Dictionary<String, String> metadata)
+        {
+            Plugin.Error(message);
+            if (PluginConfig.AutoReportingEnabled)
+            {
+                new PluginEvent(Plugin, Plugin.GetPlatform(Plugin.Server()), EnumEventLevel.ERROR, message).WithMetadata(metadata).Send(this);
+            }
+        }
+        
         public override void LogInfo(string message)
         {
             Plugin.Info(message);
@@ -152,6 +184,7 @@ namespace Tebex.Adapters
                 // We should never have an HTML response passed to callback functions which might assume is JSON
                 if (body.Contains("DOCTYPE html") || body.StartsWith("<html"))
                 {
+                    
                     LogDebug("> Unexpected html response from web request!");
                     return;
                 }
@@ -164,16 +197,13 @@ namespace Tebex.Adapters
                 {
                     if (url.Contains(TebexApi.TebexApiBase))
                     {
-                        LogError("Your server's secret key is either not set or incorrect.");
-                        LogError("tebex.secret <key>\" to set your secret key to the one associated with your webstore.");
-                        LogError("Set up your store and get your secret key at https://tebex.io/");
+                        LogWarning("Your server's secret key is either not set or incorrect.", "Use /tebex.secret <key> to set your secret key.");
                     }
                 }
                 else if (code == 429) // Rate limited
                 {
                     // Rate limits sent from Tebex enforce a 5 minute cooldown.
-                    LogWarning("We are being rate limited by Tebex API. If this issue continues, please report a problem.");
-                    LogWarning("Requests will resume after 5 minutes.");
+                    LogInfo("We are being rate limited by Tebex API. Requests will resume after 5 minutes.");
                     Plugin.PluginTimers().Once(60 * 5, () =>
                     {
                         LogDebug("Rate limit timer has elapsed.");
@@ -182,15 +212,10 @@ namespace Tebex.Adapters
                 }
                 else if (code == 500)
                 {
-                    ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Internal server error from Plugin API",
-                        new Dictionary<string, string>
-                        {
-                            { "request", logOutStr },
-                            { "response", logInStr },
-                        }));
-                    LogDebug(
-                        "Internal Server Error from Tebex API. Please try again later. Error details follow below.");
-                    LogDebug(response);
+                    LogError("Internal Server Error from Tebex API. " + response, new Dictionary<string, string>()
+                    {
+                        {"response", response}
+                    });
                     onServerError?.Invoke(code, response);
                 }
                 else if (code == 530) // Cloudflare origin error
@@ -201,13 +226,11 @@ namespace Tebex.Adapters
                 }
                 else if (code == 0)
                 {
-                    ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Request timeout to Plugin API",
-                        new Dictionary<string, string>
-                        {
-                            { "request", logOutStr },
-                            { "response", logInStr },
-                        }));
-                    LogDebug("Request Timeout from Tebex API. Please try again later.");
+                    LogWarning("Request timeout to plugin API", "Please try again. Automated requests will re-run at the next command check.", new Dictionary<string, string>
+                    {
+                        { "request", logOutStr },
+                        { "response", logInStr },
+                    });
                 }
                 else // This should be a general failure error message with a JSON-formatted response from the API.
                 {
@@ -216,23 +239,21 @@ namespace Tebex.Adapters
                         var error = JsonConvert.DeserializeObject<TebexApi.TebexError>(response);
                         if (error != null)
                         {
-                            ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
-                                "Plugin API reported general failure", new Dictionary<string, string>
-                                {
-                                    { "request", logOutStr },
-                                    { "error", error.ErrorMessage },
-                                }));
+                            LogError("API request failed: " + error.ErrorMessage, new Dictionary<string, string>
+                            {
+                                { "request", logOutStr },
+                                { "response", response },
+                                { "error", error.ErrorMessage },
+                            });
                             onApiError?.Invoke(error);
                         }
                         else
                         {
-                            ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
-                                "Plugin API error could not be interpreted!", new Dictionary<string, string>
+                            LogError("Plugin API error could not be interpreted!", new Dictionary<string, string>
                                 {
                                     { "request", logOutStr },
-                                    { "response", logInStr },
-                                }));
-                            LogDebug($"Failed to unmarshal an expected error response from API.");
+                                    { "response", response },
+                                });
                             onServerError?.Invoke(code, response);
                         }
 
@@ -241,12 +262,11 @@ namespace Tebex.Adapters
                     }
                     catch (Exception e) // Something really unexpected with our response and it's likely not JSON
                     {
-                        ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent(
-                        "Did not handle error response from API", new Dictionary<string, string>
+                        LogError("Did not handle error response from API", new Dictionary<string, string>
                         {
                             { "request", logOutStr },
                             { "response", logInStr },
-                        }));
+                        });
                         
                         LogDebug("Could not gracefully handle error response.");
                         LogDebug($"Response from remote {response}");
@@ -357,11 +377,11 @@ namespace Tebex.Adapters
                     // Some commands have slot requirements, don't execute those if the player can't accept it
                     if (slotsAvailable < command.Conditions.Slots)
                     {
-                        LogWarning($"> Player has command {command.CommandToRun} but not enough main inventory slots. Need {command.Conditions.Slots} empty slots.");
+                        LogWarning($"> Player has command {command.CommandToRun} but not enough main inventory slots.", "Need {command.Conditions.Slots} empty slots.");
                         return false;
                     }
                     #else
-                    LogWarning($"> Command has slots condition, but slots are not supported in this game.");
+                    LogWarning($"> Command has slots condition, but slots are not supported in this game.", "Remove the slots condition to suppress this message.");
                     #endif
                 }
                 
@@ -382,14 +402,12 @@ namespace Tebex.Adapters
             }
             catch (Exception e)
             {
-                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Caused exception while executing online command", new Dictionary<string, string>()
+                LogError("Caused exception while executing online command", new Dictionary<string, string>()
                 {
                     {"command", command.CommandToRun},
                     {"exception", e.Message},
                     {"trace", e.StackTrace},
-                }));
-                LogError("Failed to run online command due to exception. Command run is aborted.");
-                LogError(e.ToString());
+                });
                 return false;
             }
             
@@ -418,26 +436,22 @@ namespace Tebex.Adapters
             IPlayer iPlayer = playerObj as IPlayer;
             if (iPlayer == null)
             {
-                LogError($"Could not cast player instance when expanding username variables: {playerObj}");
-                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Could not cast player instance when expanding username variables", new Dictionary<string, string>
+                LogError($"Could not cast player instance when expanding username variables: {playerObj}", new Dictionary<string, string>
                 {
                     {"input", input},
                     {"playerObj", playerObj?.ToString()},
-                }));
+                });
                 return input;
             }
 
             if (input.Contains("{username}") && string.IsNullOrEmpty(iPlayer.Name))
             {
-                LogError($"Player name is null while expanding username?!: {iPlayer}");
-                LogError($"Base player object: {playerObj}");
-                LogError($"Input command: {input}");
-                ReportAutoTriageEvent(TebexTriage.CreateAutoTriageEvent("Player ID is null while expanding username?!: ", new Dictionary<string, string>
+                LogError("Player ID is null while expanding username?!: ", new Dictionary<string, string>
                 {
                     {"input", input},
                     {"iPlayer.Id", iPlayer.Id},
                     {"iPlayer.Name", iPlayer.Name}
-                }));
+                });
                 return input;
             }
 
@@ -454,16 +468,6 @@ namespace Tebex.Adapters
             }
 
             return parsed;
-        }
-
-        public override TebexTriage.AutoTriageEvent FillAutoTriageParameters(TebexTriage.AutoTriageEvent partialEvent)
-        {
-            partialEvent.GameId = $"{Plugin.GetGame()} {Plugin.Server().Version} | {Plugin.Server().Protocol}";
-            partialEvent.FrameworkId = "Oxide";
-            partialEvent.PluginVersion = Oxide.Plugins.Tebex.GetPluginVersion();
-            partialEvent.ServerIp = Plugin.Server().Address.ToString();
-            
-            return partialEvent;
         }
     }
 }

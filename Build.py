@@ -98,11 +98,12 @@ def merge_source_files():
         file.write("{\n")
         
         # Write the plugin first as our classes are defined inside of it.
-        file.write(output["Tebex.cs"][:-2]) # remove the close curly brace to leave class definition open
+        file.write(output["TebexPlugin.cs"][:-2]) # remove the close curly brace to leave class definition open
         
         # Write the rest of our files
         for sourceFile in output.keys():
-            if sourceFile != "Tebex.cs":
+            if sourceFile != "TebexPlugin.cs":
+                print("Writing " + sourceFile)
                 file.write(output[sourceFile])
         
         # Closing braces

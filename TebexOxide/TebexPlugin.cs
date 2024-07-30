@@ -1,3 +1,4 @@
+using System.Globalization;
 using Newtonsoft.Json;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
@@ -7,9 +8,9 @@ using Tebex.Triage;
 
 namespace Oxide.Plugins
 {
-    [Info("Tebex", "Tebex", "2.0.8")]
+    [Info("Tebex", "Tebex", "2.0.9")]
     [Description("Official support for the Tebex server monetization platform")]
-    public class Tebex : CovalencePlugin
+    public class TebexPlugin : CovalencePlugin
     {
         private static TebexOxideAdapter _adapter;
 
@@ -17,9 +18,15 @@ namespace Oxide.Plugins
 
         public static string GetPluginVersion()
         {
-            return "2.0.8";
+            return "2.0.9";
         }
 
+        public TebexPlatform GetPlatform(IServer server)
+        {
+            return new TebexPlatform(GetPluginVersion(), new TebexTelemetry("Oxide", server.Version, server.Protocol));
+        }
+        
+        
         private void Init()
         {
             // Setup our API and adapter
@@ -42,6 +49,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission("tebex.ban", this);
             permission.RegisterPermission("tebex.lookup", this);
             permission.RegisterPermission("tebex.debug", this);
+            permission.RegisterPermission("tebex.setup", this);
 
             // Register user permissions
             permission.RegisterPermission("tebex.info", this);
@@ -52,15 +60,20 @@ namespace Oxide.Plugins
             // Check if auto reporting is disabled and show a warning if so.
             if (!BaseTebexAdapter.PluginConfig.AutoReportingEnabled)
             {
-                _adapter.LogWarning("Auto reporting issues to Tebex is disabled.");
-                _adapter.LogWarning("To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
+                _adapter.LogWarning("Auto reporting issues to Tebex is disabled.", "To enable, please set 'AutoReportingEnabled' to 'true' in config/Tebex.json");
+                PluginEvent.IS_DISABLED = true;
             }
 
             // Check if secret key has been set. If so, get store information and place in cache
             if (BaseTebexAdapter.PluginConfig.SecretKey != "your-secret-key-here")
             {
-                // No-op, just to place info in the cache for any future triage events
-                _adapter.FetchStoreInfo((info => { }));
+                _adapter.FetchStoreInfo((info =>
+                {
+                    PluginEvent.SERVER_IP = server.Address.ToString();
+                    PluginEvent.SERVER_ID = info.ServerInfo.Id.ToString();
+                    PluginEvent.STORE_URL = info.AccountInfo.Domain;
+                    new PluginEvent(this, this.GetPlatform(server), EnumEventLevel.INFO, "Server Init").Send(_adapter);
+                }));
                 return;
             }
 
@@ -96,12 +109,18 @@ namespace Oxide.Plugins
 
         public void Warn(string message)
         {
-            LogWarning("{0}", message);
+            if (!BaseTebexAdapter.PluginConfig.SuppressWarnings)
+            {
+                LogWarning("{0}", message);    
+            }
         }
 
         public void Error(string message)
         {
-            LogError("{0}", message);
+            if (!BaseTebexAdapter.PluginConfig.SuppressErrors)
+            {
+                LogError("{0}", message);    
+            }
         }
 
         public void Info(string info)
@@ -202,7 +221,7 @@ namespace Oxide.Plugins
         
         private void OnServerShutdown()
         {
-            // Make sure join queue is always empties on shutdown
+            // Make sure join queue is always emptied on shutdown
             _adapter.ProcessJoinQueue();
         }
 
@@ -327,13 +346,16 @@ namespace Oxide.Plugins
                 _adapter.ReplyPlayer(player, $"Successfully set your secret key.");
                 _adapter.ReplyPlayer(player,
                     $"Store set as: {info.ServerInfo.Name} for the web store {info.AccountInfo.Name}");
+
+                PluginEvent.SERVER_ID = info.ServerInfo.Id.ToString();
+                PluginEvent.STORE_URL = info.AccountInfo.Domain;
             });
         }
 
         [Command("tebex.info", "tebex:info", "tebex.information", "tebex:information")]
         private void TebexInfoCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.info"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -352,7 +374,7 @@ namespace Oxide.Plugins
         [Command("tebex.checkout", "tebex:checkout")]
         private void TebexCheckoutCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.checkout"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -421,11 +443,11 @@ namespace Oxide.Plugins
             _adapter.ReplyPlayer(player,
                 "tebex.checkout <packId>          - Creates a checkout link for an item. Visit to purchase.");
         }
-
+        
         [Command("tebex.debug", "tebex:debug")]
         private void TebexDebugCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.debug"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -458,7 +480,7 @@ namespace Oxide.Plugins
         [Command("tebex.forcecheck", "tebex:forcecheck")]
         private void TebexForceCheckCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.forcecheck"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -473,7 +495,7 @@ namespace Oxide.Plugins
         [Command("tebex.refresh", "tebex:refresh")]
         private void TebexRefreshCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.refresh"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -494,57 +516,6 @@ namespace Oxide.Plugins
                         $"Fetched {packs.Count} packages out of {categories.Count} categories");
                 }
             });
-        }
-
-        [Command("tebex.report", "tebex:report")]
-        private void TebexReportCommand(IPlayer player, string command, string[] args)
-        {
-            if (!player.HasPermission(command))
-            {
-                _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
-                return;
-            }
-
-            if (args.Length == 0) // require /confirm to send
-            {
-                _adapter.ReplyPlayer(player,
-                    "Please run `tebex.report confirm 'Your description here'` to submit your report. The following information will be sent to Tebex: ");
-                _adapter.ReplyPlayer(player, "- Your game version, store id, and server IP.");
-                _adapter.ReplyPlayer(player, "- Your username and IP address.");
-                _adapter.ReplyPlayer(player, "- Please include a short description of the issue you were facing.");
-            }
-
-            if (args.Length == 2 && args[0] == "confirm")
-            {
-                _adapter.ReplyPlayer(player, "Sending your report to Tebex...");
-
-                var triageEvent = new TebexTriage.ReportedTriageEvent();
-                triageEvent.GameId = $"{game} {server.Version}|{server.Protocol}";
-                triageEvent.FrameworkId = "Oxide";
-                triageEvent.PluginVersion = GetPluginVersion();
-                triageEvent.ServerIp = server.Address.ToString();
-                triageEvent.ErrorMessage = "Player Report: " + args[1];
-                triageEvent.Trace = "";
-                triageEvent.Metadata = new Dictionary<string, string>()
-                {
-
-                };
-                triageEvent.Username = player.Name + "/" + player.Id;
-                triageEvent.UserIp = player.Address;
-
-                _adapter.ReportManualTriageEvent(triageEvent,
-                    (code, body) => { _adapter.ReplyPlayer(player, "Your report has been sent. Thank you!"); },
-                    (code, body) =>
-                    {
-                        _adapter.ReplyPlayer(player,
-                            "An error occurred while submitting your report. Please contact our support team directly.");
-                        _adapter.ReplyPlayer(player, "Error: " + body);
-                    });
-
-                return;
-            }
-
-            _adapter.ReplyPlayer(player, $"Usage: tebex.report <confirm> '<message>'");
         }
 
         [Command("tebex.ban", "tebex:ban")]
@@ -591,7 +562,7 @@ namespace Oxide.Plugins
         [Command("tebex.categories", "tebex:categories", "tebex.listings", "tebex:listings")]
         private void TebexCategoriesCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.categories"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -603,7 +574,7 @@ namespace Oxide.Plugins
         [Command("tebex.packages", "tebex:packages")]
         private void TebexPackagesCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.packages"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -615,7 +586,7 @@ namespace Oxide.Plugins
         [Command("tebex.lookup", "tebex:lookup")]
         private void TebexLookupCommand(IPlayer player, string command, string[] args)
         {
-            if (!player.HasPermission(command))
+            if (!player.HasPermission("tebex.lookup"))
             {
                 _adapter.ReplyPlayer(player, "You do not have permission to run that command.");
                 return;
@@ -685,5 +656,7 @@ namespace Oxide.Plugins
                 player.Command("chat.add", 0, player.Id, $"{checkoutUrl.Url}");
             }, error => { _adapter.ReplyPlayer(player, $"{error.ErrorMessage}"); });
         }
+        
+        
     }
 }
