@@ -197,7 +197,7 @@ namespace Tebex.Adapters
                 {
                     if (url.Contains(TebexApi.TebexApiBase))
                     {
-                        LogWarning("Your server's secret key is either not set or incorrect.", "Use /tebex.secret <key> to set your secret key.");
+                        LogWarning("403 Forbidden from Tebex API: " + url, "Double check that your secret key is valid. Use /tebex.secret <key> to set your secret key.");
                     }
                 }
                 else if (code == 429) // Rate limited

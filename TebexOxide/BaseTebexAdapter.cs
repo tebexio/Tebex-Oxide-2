@@ -10,6 +10,8 @@ namespace Tebex.Adapters
         private static readonly Lazy<BaseTebexAdapter> _adapterInstance = new Lazy<BaseTebexAdapter>();
         
         public static TebexConfig PluginConfig { get; set; } = new TebexConfig();
+
+        private static bool _isSecretKeyValidated = false;
         
         /** For rate limiting command queue based on next_check */
         private static DateTime _nextCheckCommandQueue = DateTime.Now;
@@ -32,6 +34,11 @@ namespace Tebex.Adapters
         public void DeleteExecutedCommands(bool ignoreWaitCheck = false)
         {
             LogDebug("Deleting executed commands...");
+            if (!IsSecretKeyValidated())
+            {
+                LogDebug("Store key is not set or incorrect. Skipping command queue.");
+                return;
+            }
             
             if (!CanProcessNextDeleteCommands() && !ignoreWaitCheck)
             {
@@ -384,6 +391,11 @@ namespace Tebex.Adapters
         public void RefreshStoreInformation(bool ignoreWaitCheck = false)
         {
             LogDebug("Refreshing store information...");
+            if (!IsSecretKeyValidated())
+            {
+                LogDebug("Store key is not set or incorrect. Skipping command queue.");
+                return;
+            }
             
             // Calling places the information in the cache
             if (!CanProcessNextRefresh() && !ignoreWaitCheck)
@@ -393,12 +405,19 @@ namespace Tebex.Adapters
             }
             
             _nextCheckRefresh = DateTime.Now.AddMinutes(15);
-            FetchStoreInfo(info => { });
+            FetchStoreInfo(info =>
+            {
+            }); // automatically stores in the cache
         }
         
         public void ProcessJoinQueue(bool ignoreWaitCheck = false)
         {
             LogDebug("Processing player join queue...");
+            if (!IsSecretKeyValidated())
+            {
+                LogDebug("Store key is not set or incorrect. Skipping command queue.");
+                return;
+            }
             
             if (!CanProcessNextJoinQueue() && !ignoreWaitCheck)
             {
@@ -456,6 +475,11 @@ namespace Tebex.Adapters
         public void ProcessCommandQueue(bool ignoreWaitCheck = false)
         {
             LogDebug("Processing command queue...");
+            if (!IsSecretKeyValidated())
+            {
+                LogDebug("Store key is not set or incorrect. Skipping command queue.");
+                return;
+            }
             
             if (!CanProcessNextCommandQueue() && !ignoreWaitCheck)
             {
@@ -680,88 +704,14 @@ namespace Tebex.Adapters
             TebexApi.ApiSuccessCallback onSuccess, TebexApi.ApiErrorCallback onApiError,
             TebexApi.ServerErrorCallback onServerError);
 
-        // public abstract TebexTriage.AutoTriageEvent FillAutoTriageParameters(TebexTriage.AutoTriageEvent partialEvent);
-        //
-        // public void ReportAutoTriageEvent(TebexTriage.AutoTriageEvent autoTriageEvent)
-        // {
-        //     if (!PluginConfig.AutoReportingEnabled)
-        //     {
-        //         return;
-        //     }
-        //
-        //     // Make sure we don't try to report triage events about ourselves if the triage API has failed.
-        //     string requestUrl = "";
-        //     var requestIncluded = autoTriageEvent.Metadata.TryGetValue("request", out requestUrl);
-        //     if (requestUrl == null)
-        //     {
-        //         requestUrl = "";
-        //     }
-        //     if (requestIncluded && requestUrl.Contains(TebexApi.TebexTriageUrl))
-        //     {
-        //         return;
-        //     }
-        //     
-        //     // Determine store name
-        //     // Determine the store info, if we have it.
-        //     var storeName = "";
-        //     var storeUrl = "";
-        //     
-        //     if (Cache.Instance.HasValid("information"))
-        //     {
-        //         TebexApi.TebexStoreInfo storeInfo = (TebexApi.TebexStoreInfo)Cache.Instance.Get("information").Value;
-        //         storeName = storeInfo.AccountInfo.Name;
-        //         storeUrl = storeInfo.AccountInfo.Domain;
-        //     }
-        //
-        //     autoTriageEvent.StoreName = storeName;
-        //     autoTriageEvent.StoreUrl = storeUrl;
-        //     
-        //     // Fill missing params using the framework adapter
-        //     autoTriageEvent = FillAutoTriageParameters(autoTriageEvent);
-        //     
-        //     MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.SerializeObject(autoTriageEvent),
-        //         TebexApi.HttpVerb.POST,
-        //         (code, body) =>
-        //         {
-        //             LogDebug("Successfully submitted auto triage event");
-        //         }, (error) =>
-        //         {
-        //             LogDebug("Triage API responded with error: " + error.ErrorMessage);
-        //         }, (code, body) =>
-        //         {
-        //             LogDebug("Triage API encountered a server error while submitting triage event: " + body);
-        //         });
-        // }
-        //
-        // public void ReportManualTriageEvent(TebexTriage.ReportedTriageEvent reportedTriageEvent, TebexApi.ApiSuccessCallback onSuccess, TebexApi.ServerErrorCallback onError)
-        // {
-        //     var storeName = "";
-        //     var storeUrl = "";
-        //     
-        //     if (Cache.Instance.HasValid("information"))
-        //     {
-        //         TebexApi.TebexStoreInfo storeInfo = (TebexApi.TebexStoreInfo)Cache.Instance.Get("information").Value;
-        //         storeName = storeInfo.AccountInfo.Name;
-        //         storeUrl = storeInfo.AccountInfo.Domain;
-        //     }
-        //
-        //     reportedTriageEvent.StoreName = storeName;
-        //     reportedTriageEvent.StoreUrl = storeUrl;
-        //     
-        //     MakeWebRequest(TebexApi.TebexTriageUrl, JsonConvert.SerializeObject(reportedTriageEvent),
-        //         TebexApi.HttpVerb.POST,
-        //         (code, body) =>
-        //         {
-        //             LogDebug("Successfully submitted manual triage event");
-        //             onSuccess(code, body);
-        //         }, (error) =>
-        //         {
-        //             LogDebug("Triage API responded with error: " + error.ErrorMessage);
-        //         }, (code, body) =>
-        //         {
-        //             LogDebug("Triage API encountered a server error while submitting manual triage event: " + body);
-        //             onError(code, body);
-        //         });
-        // }
+        public bool IsSecretKeyValidated()
+        {
+            return _isSecretKeyValidated;
+        }
+        
+        public void SetSecretKeyValidated(bool value)
+        {
+            _isSecretKeyValidated = value;
+        }
     }
 }

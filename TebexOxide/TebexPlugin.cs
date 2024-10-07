@@ -73,6 +73,7 @@ namespace Oxide.Plugins
                     PluginEvent.SERVER_ID = info.ServerInfo.Id.ToString();
                     PluginEvent.STORE_URL = info.AccountInfo.Domain;
                     new PluginEvent(this, this.GetPlatform(server), EnumEventLevel.INFO, "Server Init").Send(_adapter);
+                    _adapter.SetSecretKeyValidated(true);
                 }));
                 return;
             }
@@ -349,6 +350,7 @@ namespace Oxide.Plugins
 
                 PluginEvent.SERVER_ID = info.ServerInfo.Id.ToString();
                 PluginEvent.STORE_URL = info.AccountInfo.Domain;
+                _adapter.SetSecretKeyValidated(true);
             });
         }
 
