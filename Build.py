@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import BuildConfig
 import time
-import websocket
-from websocket import create_connection
 import json
 import threading
 import argparse

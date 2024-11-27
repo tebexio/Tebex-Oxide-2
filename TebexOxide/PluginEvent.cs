@@ -1,6 +1,5 @@
 ﻿using System.Net;
 using Newtonsoft.Json;
-using Oxide.Core.Libraries;
 using Oxide.Plugins;
 using Tebex.Adapters;
 using Tebex.API;
@@ -52,7 +51,7 @@ namespace Tebex.Triage
 
             TebexTelemetry tel = platform.GetTelemetry();
 
-            GameId = "Rust"; // always Rust
+            GameId = platform.GetGameId();
             FrameworkId = tel.GetServerSoftware(); // Oxide / Carbon
             RuntimeVersion = tel.GetRuntimeVersion(); // version of Rust
             FrameworkVersion = tel.GetServerVersion(); // version of Oxide
